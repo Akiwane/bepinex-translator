@@ -4,7 +4,7 @@
 
 v1.0 **无**游戏内/桌面配置 UI，仅使用 BepInEx ConfigFile + JSON 翻译产物。
 
-权威需求见 [`REQUIREMENTS.md`](REQUIREMENTS.md)、[`DECISIONS.md`](DECISIONS.md)、[`TEST-CASES.md`](TEST-CASES.md)。构建步骤见 [`BUILD.md`](BUILD.md)。
+构建步骤见 [`BUILD.md`](BUILD.md)。
 
 > **简要说明**：本项目为非官方第三方个人/学习用途工具，与 Unity、BepInEx 及任何游戏发行商无关；使用风险自负，详见下方[免责声明](#免责声明--disclaimer)。项目含 AI 辅助产出内容，详见 [AI 声明](#ai-声明--ai-disclosure)。以 [MIT License](./LICENSE) 发布；**切勿**提交 API 密钥。
 
@@ -34,9 +34,13 @@ v1.0 **无**游戏内/桌面配置 UI，仅使用 BepInEx ConfigFile + JSON 翻�
 
 ## 安装到游戏
 
-### 推荐：Windows 注入器（v1.1 / REQUIREMENTS §7）
+### 推荐：Windows 注入器
 
-`Injector.Core`（PR #7）识别 Mono/IL2CPP、下载匹配 BepInEx，并将本模组放入 `BepInEx/plugins`。`Injector.Gui`（本 PR）为 **完整 Avalonia UI**，绑定上述 Core。契约、默认包 pin、验收步骤见 **[`docs/injector.md`](./docs/injector.md)**。
+`Injector.Gui`（Avalonia）选择游戏目录后，会自动：
+
+1. **探测** Mono（`*_Data/Managed`）或 IL2CPP（`il2cpp_data` / `GameAssembly.dll`）
+2. **下载**匹配的 BepInEx（Mono → 5.x；IL2CPP → 6.x Unity IL2CPP）
+3. **放入插件**到 `BepInEx/plugins/Translator/`
 
 ```bash
 dotnet build src/Injector.Core/Injector.Core.csproj -c Release
@@ -44,7 +48,7 @@ dotnet build src/Injector.Gui/Injector.Gui.csproj -c Release
 dotnet run --project src/Injector.Gui
 ```
 
-合并时：以 #7 Core 为准；丢弃 #7 的占位 Gui stub。
+开发机可先构建对应运行时的插件，注入器会优先从 `artifacts/mono` / `artifacts/il2cpp` 复制；无本地产物时再尝试 GitHub Release。
 
 ### 1. 确认游戏后端（手动安装时）
 
@@ -166,8 +170,6 @@ dotnet build src/BepInExTranslator.Plugin/BepInExTranslator.Plugin.csproj -c Rel
 dotnet build src/BepInExTranslator.Plugin.Il2Cpp/BepInExTranslator.Plugin.Il2Cpp.csproj -c Release
 dotnet build src/Injector.Gui/Injector.Gui.csproj -c Release
 ```
-
-注入器说明：[`docs/injector.md`](./docs/injector.md)。
 
 ## 免责声明 / Disclaimer
 

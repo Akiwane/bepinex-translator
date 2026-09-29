@@ -13,13 +13,12 @@
 config/Translator.cfg.example       # 配置字段契约（权威）
 docs/fonts.md                       # 三字体源路径说明
 docs/translations.example.json      # 产物 JSON 样例
-docs/injector.md                    # Windows 注入器 GUI（§7）
 src/
   BepInExTranslator.Core/           # 纯逻辑（netstandard2.0）
   BepInExTranslator.Plugin/         # BepInEx 5 Mono 插件（net472）
   BepInExTranslator.Plugin.Il2Cpp/  # BepInEx 6 IL2CPP 插件（net6.0）
-  Injector.Core/                    # 注入器核心（探测/下载/布局；PR #7）
-  Injector.Gui/                     # Avalonia 完整 GUI（选游戏→探测→安装）
+  Injector.Core/                    # 注入器核心（探测/下载/布局）
+  Injector.Gui/                     # Avalonia GUI（选游戏→探测→安装）
 tests/
   BepInExTranslator.Core.Tests/     # 无 Unity 的单元测试
   Injector.Core.Tests/
@@ -36,7 +35,7 @@ dotnet test BepInExTranslator.sln -c Release
 
 ## Windows 注入器
 
-详见 [`docs/injector.md`](docs/injector.md)。**Core** 为可测安装逻辑（PR #7）；**Gui** 为完整 Avalonia UI（本 PR，绑定 #7 API）。
+**Core** 负责探测 Mono/IL2CPP、下载匹配 BepInEx，并将插件落到 `BepInEx/plugins`；**Gui** 为 Avalonia 界面。
 
 ```bash
 dotnet build src/Injector.Core/Injector.Core.csproj -c Release
@@ -93,9 +92,11 @@ dotnet build src/BepInExTranslator.Plugin.Il2Cpp/BepInExTranslator.Plugin.Il2Cpp
 占位符：`{source}` `{targetLanguage}` `{hash}`  
 字体：`FontSourceType` = `Unity` | `System` | `CustomFile`，路径见 `FontPath`。
 
-## 验收对照（REQUIREMENTS §5 / TEST-CASES）
+## 本地验证
 
-见 [`TEST-CASES.md`](TEST-CASES.md)。本地可先跑 `dotnet test` 覆盖纯逻辑 AC 子集。
+```bash
+dotnet test BepInExTranslator.sln -c Release
+```
 
 ## 故障排查
 
