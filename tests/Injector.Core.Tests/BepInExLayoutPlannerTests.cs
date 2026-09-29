@@ -595,6 +595,79 @@ public sealed class BepInExPathConflictExtractTests
         }
     }
 
+    [Fact]
+    public void ExtractZipToGameRoot_NestedDllPathIsDirectory_ReturnsPathConflict()
+    {
+        // Probe 只查顶层；嵌套「本应为文件的路径已是目录」必须由解压路径返回 PathConflict
+        var work = Path.Combine(Path.GetTempPath(), "bepinex-nested-clash-" + Guid.NewGuid().ToString("N"));
+        var gameRoot = Path.Combine(work, "game");
+        Directory.CreateDirectory(Path.Combine(gameRoot, "BepInEx", "core", "BepInEx.dll"));
+        var zipPath = Path.Combine(work, "bepinex.zip");
+        try
+        {
+            CreateZipWithEntries(
+                zipPath,
+                ("BepInEx/core/BepInEx.dll", "dll-bytes"),
+                ("winhttp.dll", "dll"));
+
+            var copied = new List<string>();
+            var err = GameInstaller.ExtractZipToGameRoot(
+                zipPath,
+                gameRoot,
+                OverwritePolicy.Overwrite,
+                backupDir: null,
+                copied,
+                _ => { });
+
+            Assert.NotNull(err);
+            Assert.Equal(InjectorErrorKind.PathConflict, err!.Kind);
+            Assert.NotEqual(InjectorErrorKind.PermissionDenied, err.Kind);
+            Assert.Contains("目录", err.Message, StringComparison.Ordinal);
+            Assert.Empty(copied);
+            // 冲突后不得继续写出后续条目
+            Assert.False(File.Exists(Path.Combine(gameRoot, "winhttp.dll")));
+        }
+        finally
+        {
+            if (Directory.Exists(work))
+            {
+                Directory.Delete(work, true);
+            }
+        }
+    }
+
+    [Fact]
+    public void ExtractTranslatorZip_DestIsDirectory_ReturnsPathConflict()
+    {
+        var work = Path.Combine(Path.GetTempPath(), "bepinex-mod-clash-" + Guid.NewGuid().ToString("N"));
+        var plugins = Path.Combine(work, "game", "BepInEx", "plugins", "Translator");
+        Directory.CreateDirectory(Path.Combine(plugins, "BepInExTranslator.dll"));
+        var zipPath = Path.Combine(work, "mod.zip");
+        try
+        {
+            CreateZipWithEntries(zipPath, ("BepInExTranslator.dll", "dll"));
+            var copied = new List<string>();
+            var err = GameInstaller.ExtractTranslatorZip(
+                zipPath,
+                plugins,
+                OverwritePolicy.Overwrite,
+                backupDir: null,
+                copied,
+                _ => { });
+
+            Assert.NotNull(err);
+            Assert.Equal(InjectorErrorKind.PathConflict, err!.Kind);
+            Assert.Empty(copied);
+        }
+        finally
+        {
+            if (Directory.Exists(work))
+            {
+                Directory.Delete(work, true);
+            }
+        }
+    }
+
     private static void CreateZipWithEntries(string zipPath, params (string Name, string Content)[] entries)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(zipPath)!);

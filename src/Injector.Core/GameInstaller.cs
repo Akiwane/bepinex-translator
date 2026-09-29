@@ -433,11 +433,13 @@ public sealed class GameInstaller : IInstaller
                     entry.FullName);
             }
 
-            // —— 目标已是目录：勿 ExtractToFile（否则 UnauthorizedAccessException → 误报权限不足）——
+            // —— 真实文件条目撞上已有目录：PathConflict（勿静默跳过误报成功）——
             if (Directory.Exists(dest))
             {
-                report($"跳过目录标记条目（目标已是目录）：{relative}");
-                continue;
+                return InjectorError.PathConflict(
+                    $"无法解压「{relative}」：目标路径已是目录，但 zip 条目是文件。"
+                    + "请先删除或重命名该目录后再安装（这不是权限问题）。",
+                    dest);
             }
 
             var parent = Path.GetDirectoryName(dest);
@@ -506,31 +508,19 @@ public sealed class GameInstaller : IInstaller
 
     /// <summary>
     /// 无尾斜杠但仍应视为目录标记的 zip 条目（常见于部分打包工具写出的 <c>BepInEx</c>）。
+    /// 仅识别已知顶层布局目录名；不把任意 0 字节无扩展名条目（如 LICENSE）当成目录。
     /// </summary>
     internal static bool IsDirectoryMarkerEntry(ZipArchiveEntry entry, string normalizedRelative)
     {
+        _ = entry;
         if (string.IsNullOrEmpty(normalizedRelative) || normalizedRelative.EndsWith('/'))
         {
             return true;
         }
 
-        // 已有明确文件扩展名的不当作目录标记
-        var leaf = normalizedRelative.Contains('/')
-            ? normalizedRelative[(normalizedRelative.LastIndexOf('/') + 1)..]
-            : normalizedRelative;
-        if (leaf.Contains('.') && !leaf.StartsWith('.'))
-        {
-            return false;
-        }
-
-        // 已知顶层布局目录，或 0 字节且无扩展名的条目
-        if (KnownLayoutDirectoryNames.Any(d =>
-                normalizedRelative.Equals(d, StringComparison.OrdinalIgnoreCase)))
-        {
-            return true;
-        }
-
-        return entry.Length == 0 && !leaf.Contains('.');
+        // 无尾斜杠：仅 KnownLayoutDirectoryNames（BepInEx / dotnet）
+        return KnownLayoutDirectoryNames.Any(d =>
+            normalizedRelative.Equals(d, StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>
@@ -632,7 +622,16 @@ public sealed class GameInstaller : IInstaller
                     entry.FullName);
             }
 
-            Directory.CreateDirectory(Path.GetDirectoryName(dest)!);
+            var parent = Path.GetDirectoryName(dest);
+            if (!string.IsNullOrEmpty(parent))
+            {
+                var parentErr = EnsureDirectoryForExtract(parent);
+                if (parentErr != null)
+                {
+                    return parentErr;
+                }
+            }
+
             var extractErr = ExtractEntryWithPolicy(entry, dest, policy, backupDir, copied, report);
             if (extractErr != null)
             {
@@ -721,11 +720,14 @@ public sealed class GameInstaller : IInstaller
         List<string> copied,
         Action<string> report)
     {
-        // —— 目标已是目录：绝不能 ExtractToFile ——
+        // —— 真实文件条目撞上已有目录：PathConflict（勿 ExtractToFile / 勿静默成功）——
         if (Directory.Exists(dest))
         {
-            report($"跳过目录标记条目（目标已是目录）：{dest}");
-            return null;
+            var name = Path.GetFileName(dest);
+            return InjectorError.PathConflict(
+                $"无法解压「{name}」：目标路径已是目录，但 zip 条目是文件。"
+                + "请先删除或重命名该目录后再安装（这不是权限问题）。",
+                dest);
         }
 
         if (File.Exists(dest))

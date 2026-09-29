@@ -27,7 +27,9 @@ IInstaller.InstallAsync(InstallOptions, IProgress<InstallProgress>?, Cancellatio
   → InstallResult（Success、CopiedFiles、可选 InjectorError）
 ```
 
-错误用 `InjectorError` / `InjectorErrorKind`（InvalidPath、NotUnityGame、DownloadFailed、PermissionDenied 等），不以裸异常作为唯一 API。
+错误用 `InjectorError` / `InjectorErrorKind`（InvalidPath、NotUnityGame、DownloadFailed、PermissionDenied、**PathConflict** 等），不以裸异常作为唯一 API。
+
+**PathConflict（≠ 权限）**：游戏根上文件/目录类型冲突——例如 0 字节文件占住 `BepInEx` 目录名，或本应为文件的路径已是目录。Gui 应提示删除/重命名冲突路径，勿引导「以管理员运行」。
 
 ## 构建
 
