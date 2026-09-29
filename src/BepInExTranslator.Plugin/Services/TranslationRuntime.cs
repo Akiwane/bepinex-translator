@@ -10,13 +10,25 @@ namespace BepInExTranslator.Services
 {
     /// <summary>
     /// 运行时翻译服务：缓存命中同步替换；未命中则异步请求并回写组件。
+    /// P0：异步回写前校验 expectedSource；字号相对 baseline，避免缓存命中反复缩小。
     /// </summary>
     public sealed class TranslationRuntime
     {
         private readonly ConcurrentDictionary<int, string> _lastApplied =
             new ConcurrentDictionary<int, string>();
 
-        // 防止我们自己 set_text 触发递归
+        // 组件当前期望的原文（世代令牌）；异步完成时须仍匹配
+        private readonly ConcurrentDictionary<int, string> _expectedSource =
+            new ConcurrentDictionary<int, string>();
+
+        // 首次见到组件时的原始字号，缩排始终相对此值
+        private readonly ConcurrentDictionary<int, float> _baselineFontSize =
+            new ConcurrentDictionary<int, float>();
+
+        // 已对「原文→译文」做过布局的组件，避免重复缩字号
+        private readonly ConcurrentDictionary<int, string> _layoutAppliedKey =
+            new ConcurrentDictionary<int, string>();
+
         private readonly ConcurrentDictionary<int, byte> _mutating =
             new ConcurrentDictionary<int, byte>();
 
@@ -48,26 +60,37 @@ namespace BepInExTranslator.Services
                 return originalText ?? string.Empty;
             }
 
-            // 忽略纯空白 / 纯数字等无翻译价值文本
-            if (ShouldSkip(originalText))
+            if (ShouldSkip(originalText!))
             {
-                return originalText;
+                return originalText!;
             }
 
             var id = component.GetHashCode();
+            // 登记本轮期望原文（使旧异步回调失效）
+            _expectedSource[id] = originalText!;
 
-            // 缓存命中：立即替换
+            // 缓存命中：立即替换；若已是同一译文则跳过布局（防反复缩字号）
             var cached = Translator.TryResolveCached(originalText);
             if (cached != null)
             {
-                ApplyPresentation(component, originalText, cached);
+                if (_lastApplied.TryGetValue(id, out var last) && last == cached)
+                {
+                    return cached;
+                }
+
+                ApplyPresentation(component, originalText!, cached, forceLayout: false);
                 _lastApplied[id] = cached;
                 return cached;
             }
 
-            // 未命中：先显示原文，后台翻译后再回写
-            _ = TranslateAndApplyAsync(component, originalText, applyText);
-            return originalText;
+            // 负缓存 / 退避中：不再每帧打 API
+            if (Translator.IsInCooldown(originalText!))
+            {
+                return originalText!;
+            }
+
+            _ = TranslateAndApplyAsync(component, originalText!, applyText);
+            return originalText!;
         }
 
         private async Task TranslateAndApplyAsync(object component, string originalText, Action<string> applyText)
@@ -80,15 +103,23 @@ namespace BepInExTranslator.Services
                     return;
                 }
 
-                // 回到主线程：Unity API 非线程安全。BepInEx Mono 上 ConfigureAwait(true) 不一定回到 Unity 线程，
-                // 因此用主线程调度器（若可用）或直接尝试；失败则仅写缓存，下次加载生效。
                 void Apply()
                 {
                     var id = component.GetHashCode();
+                    _expectedSource.TryGetValue(id, out var pendingExpected);
+                    var currentText = TryReadText(component);
+
+                    // P0-1：过期则丢弃，不覆盖更新后的文本
+                    if (!StaleWriteGuard.ShouldApply(originalText, translated, pendingExpected, currentText))
+                    {
+                        Log.LogDebug("Discard stale async translation apply.");
+                        return;
+                    }
+
                     _mutating[id] = 1;
                     try
                     {
-                        ApplyPresentation(component, originalText, translated);
+                        ApplyPresentation(component, originalText, translated, forceLayout: true);
                         applyText(translated);
                         _lastApplied[id] = translated;
                     }
@@ -113,7 +144,7 @@ namespace BepInExTranslator.Services
             }
         }
 
-        private void ApplyPresentation(object component, string source, string translation)
+        private void ApplyPresentation(object component, string source, string translation, bool forceLayout)
         {
             try
             {
@@ -124,7 +155,20 @@ namespace BepInExTranslator.Services
                     return;
                 }
 
-                LayoutAdjuster.Apply(component, source, translation, Settings);
+                var id = component.GetHashCode();
+                var layoutKey = source + "\u001f" + translation;
+                if (!forceLayout
+                    && _layoutAppliedKey.TryGetValue(id, out var done)
+                    && done == layoutKey)
+                {
+                    return;
+                }
+
+                var type = component.GetType();
+                // P0-2：相对 baseline 缩放，绝不在已缩小字号上再叠缩
+                var baseline = _baselineFontSize.GetOrAdd(id, _ => LayoutAdjuster.ReadFontSize(component, type));
+                LayoutAdjuster.ApplyFromBaseline(component, type, baseline, source, translation, Settings);
+                _layoutAppliedKey[id] = layoutKey;
             }
             catch (Exception ex)
             {
@@ -132,36 +176,38 @@ namespace BepInExTranslator.Services
             }
         }
 
+        private static string? TryReadText(object component)
+        {
+            try
+            {
+                var prop = component.GetType().GetProperty("text", BindingFlags.Instance | BindingFlags.Public);
+                if (prop != null && prop.CanRead)
+                {
+                    return prop.GetValue(component, null) as string;
+                }
+            }
+            catch
+            {
+                // ignore
+            }
+
+            return null;
+        }
+
         private static bool ShouldSkip(string text)
         {
             var trimmed = text.Trim();
-            if (trimmed.Length == 0)
-            {
-                return true;
-            }
-
-            // 过短且无字母：多为符号
-            if (trimmed.Length <= 1)
-            {
-                return true;
-            }
-
-            return false;
+            return trimmed.Length <= 1;
         }
     }
 
-    /// <summary>
-    /// 简易主线程队列：由插件 Update 泵送。
-    /// </summary>
+    /// <summary>简易主线程队列：由插件 Update 泵送。</summary>
     public static class UnityMainThread
     {
         private static readonly ConcurrentQueue<Action> Queue = new ConcurrentQueue<Action>();
         public static bool IsAvailable { get; private set; }
 
-        public static void Enable()
-        {
-            IsAvailable = true;
-        }
+        public static void Enable() => IsAvailable = true;
 
         public static void Enqueue(Action action)
         {
@@ -182,20 +228,25 @@ namespace BepInExTranslator.Services
                 }
                 catch
                 {
-                    // ignore per-item errors
+                    // ignore
                 }
             }
         }
     }
 
-    /// <summary>按组件类型反射调整字号/换行。</summary>
+    /// <summary>按组件类型反射调整字号/换行（相对 baseline）。</summary>
     public static class LayoutAdjuster
     {
-        public static void Apply(object component, string source, string translation, PluginSettings settings)
+        public static void ApplyFromBaseline(
+            object component,
+            Type type,
+            float baselineFontSize,
+            string source,
+            string translation,
+            PluginSettings settings)
         {
-            var type = component.GetType();
             var newSize = FontSizeAdjuster.ComputeAdjustedFontSize(
-                ReadFontSize(component, type),
+                baselineFontSize,
                 source,
                 translation,
                 settings.MinFontScale.Value,
@@ -209,9 +260,8 @@ namespace BepInExTranslator.Services
             }
         }
 
-        private static float ReadFontSize(object component, Type type)
+        public static float ReadFontSize(object component, Type type)
         {
-            // UGUI Text.fontSize (int), TMP fontSize (float), TextMesh.fontSize (int)
             var prop = type.GetProperty("fontSize", BindingFlags.Instance | BindingFlags.Public);
             if (prop != null)
             {
@@ -250,22 +300,17 @@ namespace BepInExTranslator.Services
 
         private static void EnableWrap(object component, Type type)
         {
-            // UGUI: horizontalOverflow = Wrap (0), verticalOverflow = Overflow
             var hOverflow = type.GetProperty("horizontalOverflow", BindingFlags.Instance | BindingFlags.Public);
             if (hOverflow != null && hOverflow.CanWrite)
             {
-                // HorizontalWrapMode.Wrap = 0
                 hOverflow.SetValue(component, Enum.ToObject(hOverflow.PropertyType, 0), null);
             }
 
-            // TMP: enableWordWrapping = true
             var wrap = type.GetProperty("enableWordWrapping", BindingFlags.Instance | BindingFlags.Public);
             if (wrap != null && wrap.CanWrite && wrap.PropertyType == typeof(bool))
             {
                 wrap.SetValue(component, true, null);
             }
-
-            // TextMesh: 无标准 wrap，跳过
         }
     }
 }
