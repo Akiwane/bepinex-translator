@@ -109,6 +109,7 @@ public static class BepInExLayoutPlanner
 
     /// <summary>
     /// 规范化 zip 条目相对路径。含 <c>..</c>、空段或盘符/绝对路径时返回 <c>null</c>（调用方应拒绝解压）。
+    /// 若原条目以 <c>/</c>（或 <c>\</c>）结尾，结果保留尾斜杠，以保留目录语义。
     /// </summary>
     internal static string? NormalizeZipEntry(string entry)
     {
@@ -129,6 +130,9 @@ public static class BepInExLayoutPlanner
         {
             return null;
         }
+
+        // Split(RemoveEmptyEntries) 会丢掉尾斜杠；先记下目录语义
+        var isDirectoryMarker = raw.EndsWith('/');
 
         var n = raw.TrimStart('/');
         var parts = n.Split('/', StringSplitOptions.RemoveEmptyEntries);
@@ -175,7 +179,12 @@ public static class BepInExLayoutPlanner
         }
 
         n = string.Join('/', cleaned);
-        return string.IsNullOrEmpty(n) ? null : n;
+        if (string.IsNullOrEmpty(n))
+        {
+            return null;
+        }
+
+        return isDirectoryMarker ? n + "/" : n;
     }
 
     /// <summary>

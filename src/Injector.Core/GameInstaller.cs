@@ -494,8 +494,22 @@ public sealed class GameInstaller : IInstaller
         return null;
     }
 
-    /// <summary>BepInEx / doorstop 布局中应为目录的顶层名。</summary>
+    /// <summary>BepInEx / doorstop 布局中应为目录的顶层名（供 Probe 使用）。</summary>
     private static readonly string[] KnownLayoutDirectoryNames = { "BepInEx", "dotnet" };
+
+    /// <summary>
+    /// 官方 BepInEx zip 中常见的布局目录相对路径（含嵌套；无尾斜杠形式）。
+    /// </summary>
+    private static readonly HashSet<string> KnownLayoutDirectoryPaths = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "BepInEx",
+        "BepInEx/core",
+        "BepInEx/plugins",
+        "BepInEx/patchers",
+        "BepInEx/config",
+        "BepInEx/cache",
+        "dotnet",
+    };
 
     /// <summary>BepInEx / doorstop 布局中应为文件的顶层名。</summary>
     private static readonly string[] KnownLayoutFileNames =
@@ -507,20 +521,24 @@ public sealed class GameInstaller : IInstaller
     };
 
     /// <summary>
-    /// 无尾斜杠但仍应视为目录标记的 zip 条目（常见于部分打包工具写出的 <c>BepInEx</c>）。
-    /// 仅识别已知顶层布局目录名；不把任意 0 字节无扩展名条目（如 LICENSE）当成目录。
+    /// 应视为目录标记的 zip 条目：尾斜杠、ZipArchive 目录条目（<see cref="ZipArchiveEntry.Name"/> 为空）、
+    /// 或已知布局目录路径（含嵌套 <c>BepInEx/plugins</c> 等；以及无尾斜杠的顶层 <c>BepInEx</c>）。
     /// </summary>
     internal static bool IsDirectoryMarkerEntry(ZipArchiveEntry entry, string normalizedRelative)
     {
-        _ = entry;
         if (string.IsNullOrEmpty(normalizedRelative) || normalizedRelative.EndsWith('/'))
         {
             return true;
         }
 
-        // 无尾斜杠：仅 KnownLayoutDirectoryNames（BepInEx / dotnet）
-        return KnownLayoutDirectoryNames.Any(d =>
-            normalizedRelative.Equals(d, StringComparison.OrdinalIgnoreCase));
+        // Zip 目录条目：Name 为空（FullName 通常以 / 结尾；归一化后仍可凭 Name 识别）
+        if (string.IsNullOrEmpty(entry.Name))
+        {
+            return true;
+        }
+
+        var path = normalizedRelative.TrimEnd('/');
+        return KnownLayoutDirectoryPaths.Contains(path);
     }
 
     /// <summary>

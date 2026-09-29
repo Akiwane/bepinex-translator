@@ -330,6 +330,17 @@ public sealed class ZipSlipTests
     }
 
     [Fact]
+    public void NormalizeZipEntry_PreservesTrailingSlashDirectorySemantics()
+    {
+        Assert.Equal("BepInEx/plugins/", BepInExLayoutPlanner.NormalizeZipEntry("BepInEx/plugins/"));
+        Assert.Equal("BepInEx/core/", BepInExLayoutPlanner.NormalizeZipEntry("BepInEx/core/"));
+        Assert.Equal("BepInEx/patchers/",
+            BepInExLayoutPlanner.NormalizeZipEntry("BepInEx_Unity.IL2CPP/BepInEx/patchers/"));
+        // 文件条目不得被加上尾斜杠
+        Assert.Equal("BepInEx/plugins", BepInExLayoutPlanner.NormalizeZipEntry("BepInEx/plugins"));
+    }
+
+    [Fact]
     public void ExtractZipToGameRoot_RejectsDotDotEntry()
     {
         var work = Path.Combine(Path.GetTempPath(), "bepinex-zipslip-" + Guid.NewGuid().ToString("N"));
@@ -665,6 +676,175 @@ public sealed class BepInExPathConflictExtractTests
             {
                 Directory.Delete(work, true);
             }
+        }
+    }
+
+    [Fact]
+    public void ExtractZipToGameRoot_OfficialIl2CppLayout_EmptyRoot_CreatesDirectoriesNotZeroByteFiles()
+    {
+        var work = Path.Combine(Path.GetTempPath(), "bepinex-il2cpp-empty-" + Guid.NewGuid().ToString("N"));
+        var gameRoot = Path.Combine(work, "game");
+        Directory.CreateDirectory(gameRoot);
+        var zipPath = Path.Combine(work, "BepInEx-Unity.IL2CPP-win-x64-6.0.0-pre.2.zip");
+        try
+        {
+            CreateOfficialIl2CppLayoutZip(zipPath);
+            var copied = new List<string>();
+            var err = GameInstaller.ExtractZipToGameRoot(
+                zipPath,
+                gameRoot,
+                OverwritePolicy.Overwrite,
+                backupDir: null,
+                copied,
+                _ => { });
+
+            Assert.Null(err);
+            AssertDirsNotFiles(
+                Path.Combine(gameRoot, "BepInEx"),
+                Path.Combine(gameRoot, "BepInEx", "plugins"),
+                Path.Combine(gameRoot, "BepInEx", "core"),
+                Path.Combine(gameRoot, "BepInEx", "patchers"),
+                Path.Combine(gameRoot, "dotnet"));
+            Assert.True(File.Exists(Path.Combine(gameRoot, "winhttp.dll")));
+            Assert.True(File.Exists(Path.Combine(gameRoot, "BepInEx", "core", "BepInEx.Core.dll")));
+            Assert.NotEmpty(copied);
+        }
+        finally
+        {
+            if (Directory.Exists(work))
+            {
+                Directory.Delete(work, true);
+            }
+        }
+    }
+
+    [Fact]
+    public void ExtractZipToGameRoot_OfficialIl2CppLayout_ReinstallOverExistingDirs_Succeeds()
+    {
+        var work = Path.Combine(Path.GetTempPath(), "bepinex-il2cpp-reinstall-" + Guid.NewGuid().ToString("N"));
+        var gameRoot = Path.Combine(work, "game");
+        // 已有合法布局（实机 GlitterInvitation 重装场景）
+        Directory.CreateDirectory(Path.Combine(gameRoot, "BepInEx", "plugins"));
+        Directory.CreateDirectory(Path.Combine(gameRoot, "BepInEx", "core"));
+        Directory.CreateDirectory(Path.Combine(gameRoot, "BepInEx", "patchers"));
+        Directory.CreateDirectory(Path.Combine(gameRoot, "dotnet"));
+        File.WriteAllText(Path.Combine(gameRoot, "BepInEx", "plugins", "keep-me.txt"), "user");
+        var zipPath = Path.Combine(work, "bepinex-il2cpp.zip");
+        try
+        {
+            CreateOfficialIl2CppLayoutZip(zipPath);
+            var copied = new List<string>();
+            var err = GameInstaller.ExtractZipToGameRoot(
+                zipPath,
+                gameRoot,
+                OverwritePolicy.Overwrite,
+                backupDir: null,
+                copied,
+                _ => { });
+
+            Assert.Null(err);
+            Assert.NotEqual(InjectorErrorKind.PathConflict, err?.Kind ?? InjectorErrorKind.None);
+            AssertDirsNotFiles(
+                Path.Combine(gameRoot, "BepInEx", "plugins"),
+                Path.Combine(gameRoot, "BepInEx", "core"),
+                Path.Combine(gameRoot, "BepInEx", "patchers"));
+            Assert.True(File.Exists(Path.Combine(gameRoot, "BepInEx", "plugins", "keep-me.txt")));
+            Assert.True(File.Exists(Path.Combine(gameRoot, "BepInEx", "core", "BepInEx.Core.dll")));
+            Assert.Contains(copied, p => p.EndsWith("BepInEx.Core.dll", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            if (Directory.Exists(work))
+            {
+                Directory.Delete(work, true);
+            }
+        }
+    }
+
+    [Fact]
+    public void ExtractZipToGameRoot_NestedDirMarkersWithoutSlash_AreDirectories()
+    {
+        // 无尾斜杠的嵌套目录标记（Normalize 无法保留 /）仍须识别为目录
+        var work = Path.Combine(Path.GetTempPath(), "bepinex-noslash-dirs-" + Guid.NewGuid().ToString("N"));
+        var gameRoot = Path.Combine(work, "game");
+        Directory.CreateDirectory(gameRoot);
+        var zipPath = Path.Combine(work, "markers.zip");
+        try
+        {
+            CreateZipWithEntries(
+                zipPath,
+                ("BepInEx", ""),
+                ("BepInEx/plugins", ""),
+                ("BepInEx/core", ""),
+                ("BepInEx/patchers", ""),
+                ("BepInEx/core/BepInEx.Core.dll", "x"));
+
+            var copied = new List<string>();
+            var err = GameInstaller.ExtractZipToGameRoot(
+                zipPath, gameRoot, OverwritePolicy.Overwrite, null, copied, _ => { });
+
+            Assert.Null(err);
+            AssertDirsNotFiles(
+                Path.Combine(gameRoot, "BepInEx"),
+                Path.Combine(gameRoot, "BepInEx", "plugins"),
+                Path.Combine(gameRoot, "BepInEx", "core"),
+                Path.Combine(gameRoot, "BepInEx", "patchers"));
+            Assert.True(File.Exists(Path.Combine(gameRoot, "BepInEx", "core", "BepInEx.Core.dll")));
+        }
+        finally
+        {
+            if (Directory.Exists(work))
+            {
+                Directory.Delete(work, true);
+            }
+        }
+    }
+
+    /// <summary>镜像官方 IL2CPP release zip：目录条目带尾斜杠 + 无尾斜杠顶层 BepInEx 标记 + 文件。</summary>
+    private static void CreateOfficialIl2CppLayoutZip(string zipPath)
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(zipPath)!);
+        using var fs = File.Create(zipPath);
+        using var zip = new ZipArchive(fs, ZipArchiveMode.Create);
+
+        // 目录标记（尾斜杠 → ZipArchiveEntry.Name 为空）
+        foreach (var dir in new[]
+                 {
+                     "BepInEx/",
+                     "BepInEx/core/",
+                     "BepInEx/plugins/",
+                     "BepInEx/patchers/",
+                     "BepInEx/config/",
+                     "dotnet/",
+                 })
+        {
+            zip.CreateEntry(dir);
+        }
+
+        // 部分打包工具还会写出无尾斜杠的顶层目录标记
+        zip.CreateEntry("BepInEx");
+
+        void AddFile(string name, string content)
+        {
+            var e = zip.CreateEntry(name);
+            using var w = new StreamWriter(e.Open());
+            w.Write(content);
+        }
+
+        AddFile("winhttp.dll", "dll");
+        AddFile("doorstop_config.ini", "[General]\nenabled=true\n");
+        AddFile(".doorstop_version", "4.4.0");
+        AddFile("BepInEx/core/BepInEx.Core.dll", "core-dll");
+        AddFile("BepInEx/core/BepInEx.Unity.IL2CPP.dll", "il2cpp-dll");
+        AddFile("dotnet/hostfxr.dll", "host");
+    }
+
+    private static void AssertDirsNotFiles(params string[] paths)
+    {
+        foreach (var path in paths)
+        {
+            Assert.True(Directory.Exists(path), $"expected directory: {path}");
+            Assert.False(File.Exists(path), $"must not be a 0-byte file: {path}");
         }
     }
 
