@@ -241,7 +241,10 @@ public partial class MainWindowViewModel : ObservableObject
 
     private bool CanExecuteInstall() => CanInstall && !IsBusy;
 
-    [RelayCommand(CanExecute = nameof(CanExecuteInstall))]
+    // AllowConcurrentExecutions：忙碌态完全由 IsBusy/CanExecuteInstall 控制。
+    // 默认 AsyncRelayCommand 在方法仍在 finally 内时 IsRunning=true，此时 NotifyCanExecuteChanged
+    // 仍会得到 false；若完成后的二次通知未被 Avalonia 吃到，Install 会一直灰掉无法重试。
+    [RelayCommand(CanExecute = nameof(CanExecuteInstall), AllowConcurrentExecutions = true)]
     private async Task InstallAsync()
     {
         if (_lastDetection is null
@@ -252,7 +255,9 @@ public partial class MainWindowViewModel : ObservableObject
             return;
         }
 
+        // 取消并丢弃上一轮 token，避免失败/取消后留下已取消的 CTS 影响下一次。
         _installCts?.Cancel();
+        _installCts?.Dispose();
         _installCts = new CancellationTokenSource();
         IsBusy = true;
         ClearBanner();
@@ -295,11 +300,11 @@ public partial class MainWindowViewModel : ObservableObject
 
                 ShowSuccess(msg);
                 StatusText = "完成";
-                ProgressIsIndeterminate = false;
                 ProgressValue = 100;
             }
             else
             {
+                // 失败：保留探测结果与错误横幅，仅恢复可重试状态（在 finally 中统一复位）。
                 ShowError(FormatInstallError(result));
                 StatusText = UiStrings.Ready;
             }
@@ -316,18 +321,32 @@ public partial class MainWindowViewModel : ObservableObject
         }
         finally
         {
+            // 先清 IsBusy，丢弃可能仍在排队的 Progress 回调，再复位进度条与 CanInstall。
             IsBusy = false;
+            ProgressIsIndeterminate = false;
             CanInstall = _lastDetection is
             {
                 IsValidUnityGame: true,
                 Runtime: UnityRuntimeKind.Mono or UnityRuntimeKind.Il2Cpp,
                 Error: null,
             };
+
+            // 显式刷新 CanExecute：保证失败后 Install 可再次点击（不依赖 AsyncRelayCommand IsRunning 收尾通知）。
+            InstallCommand.NotifyCanExecuteChanged();
+
+            _installCts?.Dispose();
+            _installCts = null;
         }
     }
 
     private void OnProgress(InstallProgress p)
     {
+        // 忽略安装结束后才送达的进度回调，避免把 ProgressIsIndeterminate / StatusText 再次打回忙碌态。
+        if (!IsBusy)
+        {
+            return;
+        }
+
         StatusText = string.IsNullOrWhiteSpace(p.Message)
             ? p.Phase.ToString()
             : p.Message;
