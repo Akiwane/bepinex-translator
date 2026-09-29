@@ -27,9 +27,10 @@ public partial class MainWindowViewModel : ObservableObject
         _runtimeOptions = runtimeOptions;
         StatusText = UiStrings.Ready;
         SelectedOverwriteItem = OverwritePolicies.First(p => p.Policy == _runtimeOptions.DefaultOverwritePolicy);
+        // 默认 pin 说明；自定义 URL 由下方高级选项写入 BepInExIl2CppUrl。
         PinNote =
             $"BepInEx pin：Mono={PackageCatalog.BepInEx5Version}；IL2CPP={PackageCatalog.BepInEx6Version}" +
-            $"（插件 NuGet {PackageCatalog.BepInEx6PluginNuGetVersion}，可用本地 zip/URL 覆盖）。" +
+            $"（插件 NuGet {PackageCatalog.BepInEx6PluginNuGetVersion}）。" +
             $" 模组默认远程：GitHub latest → {PackageCatalog.DefaultTranslatorReleaseAssetPattern}；优先本地 artifacts/。";
     }
 
@@ -91,6 +92,24 @@ public partial class MainWindowViewModel : ObservableObject
     [ObservableProperty]
     private string _pinNote = string.Empty;
 
+    /// <summary>true = 不覆盖 Core 目录 pin；false = 安装前写入 BepInExIl2CppUrl。</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(UseCustomIl2CppUrl))]
+    [NotifyPropertyChangedFor(nameof(IsCustomIl2CppUrlEnabled))]
+    private bool _useDefaultIl2CppPin = true;
+
+    [ObservableProperty]
+    private string _customIl2CppUrl = string.Empty;
+
+    /// <summary>与 UseDefaultIl2CppPin 互斥，供第二个 RadioButton 双向绑定。</summary>
+    public bool UseCustomIl2CppUrl
+    {
+        get => !UseDefaultIl2CppPin;
+        set => UseDefaultIl2CppPin = !value;
+    }
+
+    public bool IsCustomIl2CppUrlEnabled => !UseDefaultIl2CppPin && !IsBusy;
+
     public bool IsErrorBanner => BannerKind == BannerKind.Error;
     public bool IsWarningBanner => BannerKind == BannerKind.Warning;
     public bool IsSuccessBanner => BannerKind == BannerKind.Success;
@@ -108,6 +127,11 @@ public partial class MainWindowViewModel : ObservableObject
     public string InstallButtonLabel => UiStrings.InstallButton;
     public string OverwritePolicyLabel => UiStrings.OverwritePolicyLabel;
     public string ProbeHint => UiStrings.ProbeHint;
+    public string Il2CppPackageSourceLabel => UiStrings.Il2CppPackageSourceLabel;
+    public string Il2CppUseDefaultPinLabel => UiStrings.Il2CppUseDefaultPin;
+    public string Il2CppUseCustomUrlLabel => UiStrings.Il2CppUseCustomUrl;
+    public string Il2CppCustomUrlPlaceholder => UiStrings.Il2CppCustomUrlPlaceholder;
+    public string Il2CppCustomUrlHint => UiStrings.Il2CppCustomUrlHint;
 
     [RelayCommand]
     private async Task BrowseFolderAsync()
@@ -242,6 +266,9 @@ public partial class MainWindowViewModel : ObservableObject
             _packageSources.RepositoryRoot = _runtimeOptions.RepositoryRoot;
         }
 
+        // IL2CPP 高级覆盖：默认 pin → 清空；自定义 URL → 写入 BepInExIl2CppUrl（Mono 路径忽略该字段）。
+        ApplyIl2CppPackageSourceOverride();
+
         var options = new InstallOptions
         {
             Detection = _lastDetection,
@@ -315,6 +342,25 @@ public partial class MainWindowViewModel : ObservableObject
             ProgressIsIndeterminate = true;
         }
     }
+
+    /// <summary>
+    /// 按 GUI 选项同步 <see cref="PackageSourceOptions.BepInExIl2CppUrl"/>：
+    /// 默认 pin 或空 URL → null（Core 用目录 6.0.0-pre.2）；否则 Trim 后写入。
+    /// </summary>
+    private void ApplyIl2CppPackageSourceOverride()
+    {
+        if (UseDefaultIl2CppPin || string.IsNullOrWhiteSpace(CustomIl2CppUrl))
+        {
+            _packageSources.BepInExIl2CppUrl = null;
+            return;
+        }
+
+        _packageSources.BepInExIl2CppUrl = CustomIl2CppUrl.Trim();
+    }
+
+    partial void OnIsBusyChanged(bool value) =>
+        OnPropertyChanged(nameof(IsCustomIl2CppUrlEnabled));
+
 
     private static string FormatDetectionError(InjectorError error)
     {
