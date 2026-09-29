@@ -1,5 +1,7 @@
 # BepInEx 通用翻译模组 · 验收标准与测试用例（v1.0）
 
+> 注入器 v1.1（REQUIREMENTS §7）验收标准与测试用例见 [`TEST-CASES-INJECTOR-v1.1.md`](TEST-CASES-INJECTOR-v1.1.md)。
+
 - 依据：`REQUIREMENTS.md` §5 + §2 已锁定决策  
 - 日期：2026-09-29  
 - 角色：测试  
