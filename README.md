@@ -32,7 +32,16 @@ v1.0 **无**游戏内/桌面配置 UI，仅使用 BepInEx ConfigFile + JSON 翻�
 
 ## 安装到游戏
 
-### 1. 确认游戏后端
+### 推荐：Windows 注入器 GUI（v1.1 / REQUIREMENTS §7）
+
+独立桌面程序可自动识别 Mono/IL2CPP、下载匹配的 BepInEx，并将本模组放入 `BepInEx/plugins`。用法、默认包 pin、验收步骤见 **[`docs/injector.md`](./docs/injector.md)**。
+
+```bash
+dotnet build src/BepInExTranslator.Injector.Gui/BepInExTranslator.Injector.Gui.csproj -c Release
+dotnet run --project src/BepInExTranslator.Injector.Gui -c Release
+```
+
+### 1. 确认游戏后端（手动安装时）
 
 - 存在 `*_Data/Managed` 且无 `il2cpp_data` → **Mono** → **BepInEx 5.x**
 - 存在 `il2cpp_data` / `GameAssembly.dll` → **IL2CPP** → **BepInEx 6.x Unity IL2CPP**
@@ -150,7 +159,10 @@ FontPath = Microsoft YaHei
 dotnet test BepInExTranslator.sln
 dotnet build src/BepInExTranslator.Plugin/BepInExTranslator.Plugin.csproj -c Release
 dotnet build src/BepInExTranslator.Plugin.Il2Cpp/BepInExTranslator.Plugin.Il2Cpp.csproj -c Release
+dotnet build src/BepInExTranslator.Injector.Gui/BepInExTranslator.Injector.Gui.csproj -c Release
 ```
+
+注入器说明：[`docs/injector.md`](./docs/injector.md)。
 
 ## 许可证与安全
 

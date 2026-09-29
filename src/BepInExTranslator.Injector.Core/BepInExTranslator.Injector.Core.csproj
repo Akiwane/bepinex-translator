@@ -1,0 +1,11 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>BepInExTranslator.Injector.Core</RootNamespace>
+    <AssemblyName>BepInExTranslator.Injector.Core</AssemblyName>
+    <Description>Windows injector core: Unity Mono/IL2CPP detection, BepInEx package resolve/download, and layout install.</Description>
+  </PropertyGroup>
+</Project>

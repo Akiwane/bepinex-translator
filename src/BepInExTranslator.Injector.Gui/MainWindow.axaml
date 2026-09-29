@@ -1,0 +1,75 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="BepInExTranslator.Injector.Gui.MainWindow"
+        Title="BepInEx Translator 注入器"
+        Width="820"
+        Height="720"
+        MinWidth="640"
+        MinHeight="520"
+        WindowStartupLocation="CenterScreen">
+  <DockPanel Margin="16">
+    <TextBlock DockPanel.Dock="Top"
+               Text="BepInEx Translator 注入器"
+               FontSize="22"
+               FontWeight="SemiBold"
+               Margin="0,0,0,4" />
+    <TextBlock DockPanel.Dock="Top"
+               Text="选择游戏目录或 .exe → 识别 Mono/IL2CPP → 下载并安装匹配的 BepInEx 与翻译模组"
+               Opacity="0.75"
+               TextWrapping="Wrap"
+               Margin="0,0,0,12" />
+
+    <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Spacing="8" Margin="0,12,0,0">
+      <Button Name="DetectButton" Content="重新探测" MinWidth="100" Click="OnDetectClick" />
+      <Button Name="InstallButton" Content="下载并安装" MinWidth="120" Click="OnInstallClick" />
+      <TextBlock Name="StatusText" VerticalAlignment="Center" Margin="12,0,0,0" />
+    </StackPanel>
+
+    <ScrollViewer>
+      <StackPanel Spacing="10">
+        <!-- 游戏路径 -->
+        <TextBlock Text="游戏目录 / .exe" FontWeight="SemiBold" />
+        <Grid ColumnDefinitions="*,Auto,Auto">
+          <TextBox Name="GamePathBox" Watermark="例如 D:\Games\MyGame 或 MyGame.exe" />
+          <Button Grid.Column="1" Content="浏览目录…" Margin="8,0,0,0" Click="OnBrowseFolderClick" />
+          <Button Grid.Column="2" Content="浏览 exe…" Margin="8,0,0,0" Click="OnBrowseExeClick" />
+        </Grid>
+
+        <!-- 探测结果 -->
+        <Border BorderBrush="#CCC" BorderThickness="1" CornerRadius="4" Padding="10" Background="#FAFAFA">
+          <StackPanel Spacing="4">
+            <TextBlock Text="探测结果" FontWeight="SemiBold" />
+            <TextBlock Name="RuntimeText" Text="运行时：—" />
+            <TextBlock Name="UnityVersionText" Text="Unity 版本：—" />
+            <TextBlock Name="NotesText" TextWrapping="Wrap" Opacity="0.85" />
+          </StackPanel>
+        </Border>
+
+        <!-- 覆盖策略 -->
+        <TextBlock Text="覆盖策略" FontWeight="SemiBold" />
+        <StackPanel Orientation="Horizontal" Spacing="16">
+          <RadioButton Name="PolicyBackup" Content="备份后覆盖（推荐）" IsChecked="True" />
+          <RadioButton Name="PolicySkip" Content="跳过已存在" />
+          <RadioButton Name="PolicyOverwrite" Content="直接覆盖" />
+        </StackPanel>
+
+        <!-- 可选包来源 -->
+        <TextBlock Text="包来源（可选覆盖；默认见 docs/injector.md）" FontWeight="SemiBold" />
+        <TextBox Name="BepInExLocalZipBox" Watermark="BepInEx 本地 zip（优先于下载）" />
+        <TextBox Name="TranslatorLocalZipBox" Watermark="翻译模组本地 zip（优先）" />
+        <TextBox Name="TranslatorArtifactsBox" Watermark="翻译模组 artifacts 目录（默认仓库 artifacts/mono|il2cpp）" />
+        <TextBox Name="TranslatorUrlBox" Watermark="翻译模组下载 URL（无本地包时）" />
+        <TextBox Name="TranslatorTagBox" Watermark="翻译模组 GitHub Release tag（可选，拼默认资产名）" />
+
+        <TextBlock Text="日志" FontWeight="SemiBold" />
+        <TextBox Name="LogBox"
+                 AcceptsReturn="True"
+                 IsReadOnly="True"
+                 TextWrapping="Wrap"
+                 MinHeight="180"
+                 FontFamily="Consolas,Courier New,monospace"
+                 FontSize="12" />
+      </StackPanel>
+    </ScrollViewer>
+  </DockPanel>
+</Window>

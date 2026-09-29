@@ -34,3 +34,9 @@ project.lock.json
 TestResults/
 *.trx
 *.coverage
+
+## Injector local downloads / backups (never commit)
+.bepinex-translator-cache/
+.injector-backup/
+**/BepInEx_*.zip
+**/BepInEx-*.zip

@@ -13,12 +13,16 @@
 config/Translator.cfg.example       # 配置字段契约（权威）
 docs/fonts.md                       # 三字体源路径说明
 docs/translations.example.json      # 产物 JSON 样例
+docs/injector.md                    # Windows 注入器 GUI（§7）
 src/
   BepInExTranslator.Core/           # 纯逻辑（netstandard2.0）
   BepInExTranslator.Plugin/         # BepInEx 5 Mono 插件（net472）
   BepInExTranslator.Plugin.Il2Cpp/  # BepInEx 6 IL2CPP 插件（net6.0）
+  BepInExTranslator.Injector.Core/  # 注入器核心（探测/下载/布局）
+  BepInExTranslator.Injector.Gui/   # Avalonia Windows GUI
 tests/
   BepInExTranslator.Core.Tests/     # 无 Unity 的单元测试
+  BepInExTranslator.Injector.Core.Tests/
 artifacts/mono|il2cpp/              # 构建输出（gitignore）
 ```
 
@@ -28,7 +32,18 @@ artifacts/mono|il2cpp/              # 构建输出（gitignore）
 dotnet test BepInExTranslator.sln -c Release
 ```
 
-覆盖：`TextHasher`、`TemplateFiller`（含 `{source}`/`{targetLanguage}`/`{hash}`）、`TranslationCache`、`FontSizeAdjuster`、`JsonPathExtractor`（含 `choices.0.message.content`）、按需翻译跳过 API。
+覆盖：`TextHasher`、`TemplateFiller`（含 `{source}`/`{targetLanguage}`/`{hash}`）、`TranslationCache`、`FontSizeAdjuster`、`JsonPathExtractor`（含 `choices.0.message.content`）、按需翻译跳过 API；以及注入器探测桩（Mono/IL2CPP）、布局规划与本地 zip 落盘。
+
+## Windows 注入器 GUI
+
+详见 [`docs/injector.md`](docs/injector.md)。
+
+```bash
+dotnet build src/BepInExTranslator.Injector.Gui/BepInExTranslator.Injector.Gui.csproj -c Release
+dotnet run --project src/BepInExTranslator.Injector.Gui -c Release
+```
+
+默认 BepInEx pin：Mono → `5.4.23.5` win-x64；IL2CPP → `6.0.0-pre.2` Unity.IL2CPP win-x64。模组默认取自 `artifacts/mono|il2cpp`。
 
 ## 构建 Mono 插件（BepInEx 5）
 
