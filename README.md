@@ -6,6 +6,8 @@ v1.0 **无**游戏内/桌面配置 UI，仅使用 BepInEx ConfigFile + JSON 翻�
 
 权威需求见 [`REQUIREMENTS.md`](REQUIREMENTS.md)、[`DECISIONS.md`](DECISIONS.md)、[`TEST-CASES.md`](TEST-CASES.md)。构建步骤见 [`BUILD.md`](BUILD.md)。
 
+> **简要说明**：本项目为非官方第三方个人/学习用途工具，与 Unity、BepInEx 及任何游戏发行商无关；使用风险自负，详见下方[免责声明](#免责声明--disclaimer)。项目含 AI 辅助产出内容，详见 [AI 声明](#ai-声明--ai-disclosure)。以 [MIT License](./LICENSE) 发布；**切勿**提交 API 密钥。
+
 ## 配置与样例（字段契约）
 
 下列文件中的**字段名是插件后端的实现契约**。后端按这些名字接线；**切勿**把真实 API 密钥提交进仓库。
@@ -167,7 +169,25 @@ dotnet build src/Injector.Gui/Injector.Gui.csproj -c Release
 
 注入器说明：[`docs/injector.md`](./docs/injector.md)。
 
+## 免责声明 / Disclaimer
+
+本项目为**非官方第三方工具**，仅供个人学习与研究使用。
+
+- **非关联**：与 Unity、BepInEx、任何游戏发行商或其关联方**无任何隶属、授权或背书关系**。
+- **风险自负**：修改游戏运行时（含注入 BepInEx / 本插件）可能导致崩溃、存档损坏、账号处罚或违反服务条款；**使用者自行承担全部风险**。
+- **无担保**：软件按「现状」提供，不提供任何明示或暗示担保（含适销性、特定用途适用性等）。
+- **合法使用**：请勿用于盗版，或在禁止 circumvention 的情况下绕过付费本地化 / DRM；请遵守所玩游戏的 EULA，以及所用翻译 API 的服务条款。
+
+## AI 声明 / AI disclosure
+
+本项目的相当一部分内容（需求、代码、文档等）由 AI 编程助手生成或协助完成。
+
+- 合并或发布前仍需**人工审阅**。
+- **不保证**正确性、完整性或安全性；请自行验证后再用于生产或对外分发。
+
 ## 许可证与安全
+
+本项目以 [**MIT License**](./LICENSE) 发布。完整条款见仓库根目录 [`LICENSE`](./LICENSE)。
 
 - 仓库内**不得**提交 API Key 或带密钥的真实 endpoint。
 - 使用第三方翻译 API 时请遵守其服务条款与游戏 EULA / ToS。
