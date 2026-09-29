@@ -1,0 +1,17 @@
+[
+  {
+    "hash": "a1b2c3d4e5f6789012345678abcdef01",
+    "source": "Start Game",
+    "translation": "开始游戏"
+  },
+  {
+    "hash": "b2c3d4e5f6789012345678abcdef0123",
+    "source": "Settings",
+    "translation": "设置"
+  },
+  {
+    "hash": "c3d4e5f6789012345678abcdef012345",
+    "source": "Press any key to continue",
+    "translation": ""
+  }
+]
