@@ -1,0 +1,17 @@
+[
+  {
+    "hash": "185f8db32271fe25f561a6fc938b2e26",
+    "source": "Hello",
+    "translation": "你好"
+  },
+  {
+    "hash": "d64f623d896f49ded5b0afac113260a1",
+    "source": "Save Game",
+    "translation": "保存游戏"
+  },
+  {
+    "hash": "e4bb9f1ece9af9264a3b9e3913bbdb2c",
+    "source": "Start",
+    "translation": ""
+  }
+]

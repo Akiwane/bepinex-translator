@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net6.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <RootNamespace>BepInExTranslator</RootNamespace>
+    <AssemblyName>BepInExTranslator</AssemblyName>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <OutputPath>..\..\artifacts\il2cpp\</OutputPath>
+    <!-- IL2CPP 插件需在能访问游戏 Il2Cpp 互操作程序集的环境中最终链接。
+         本仓库提供可编译的 BepInEx 6 骨架 + 与 Mono 共用的 Core；见 BUILD.md。 -->
+    <DefineConstants>$(DefineConstants);IL2CPP</DefineConstants>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="BepInEx.Unity.IL2CPP" Version="6.0.0-be.733" />
+    <PackageReference Include="HarmonyX" Version="2.10.2" />
+    <!-- 无游戏 interop 时仍可编译通用骨架；运行期类型由 BepInEx IL2CPP 提供 -->
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\BepInExTranslator.Core\BepInExTranslator.Core.csproj" />
+  </ItemGroup>
+
+  <!-- 复用 Mono 插件中与 Unity/BepInEx5 解耦的配置与工厂（通过链接编译） -->
+  <ItemGroup>
+    <Compile Include="..\BepInExTranslator.Plugin\PluginSettings.cs" Link="Shared\PluginSettings.cs" />
+    <Compile Include="..\BepInExTranslator.Plugin\BackendFactory.cs" Link="Shared\BackendFactory.cs" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,36 @@
+## Build
+bin/
+obj/
+out/
+artifacts/
+*.user
+*.dll
+*.pdb
+*.mdb
+*.exe
+!samples/**
+
+## IDE
+.vs/
+.idea/
+*.suo
+*.userprefs
+
+## OS
+.DS_Store
+Thumbs.db
+
+## Secrets / local config
+**/secrets.json
+**/*apikey*
+**/.env
+*.local.cfg
+
+## NuGet
+packages/
+project.lock.json
+
+## Test
+TestResults/
+*.trx
+*.coverage

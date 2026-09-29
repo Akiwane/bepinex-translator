@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net472</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <RootNamespace>BepInExTranslator</RootNamespace>
+    <AssemblyName>BepInExTranslator</AssemblyName>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <OutputPath>..\..\artifacts\mono\</OutputPath>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="BepInEx.Analyzers" Version="1.0.8" PrivateAssets="all" />
+    <PackageReference Include="BepInEx.Core" Version="5.4.21" />
+    <PackageReference Include="HarmonyX" Version="2.10.2" />
+    <PackageReference Include="UnityEngine.Modules" Version="2021.3.35" IncludeAssets="compile" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\BepInExTranslator.Core\BepInExTranslator.Core.csproj" />
+  </ItemGroup>
+
+  <!-- UnityEngine.UI / TextMeshPro 在多数游戏中以 Managed DLL 形式存在；
+       通用模组用反射挂接，不硬引用，避免编译期绑定特定版本。 -->
+</Project>

@@ -1,0 +1,42 @@
+# 示例：BepInEx 配置（生成于 BepInEx/config/com.akiwane.bepinextranslator.cfg）
+
+# 说明：
+# - 不要把含真实 ApiKey 的 cfg 提交到 git
+# - BackendType = HttpJsonTemplate | OpenAiCompatible
+
+[General]
+TargetLanguage = zh-CN
+BackendType = HttpJsonTemplate
+TimeoutMs = 20000
+## 留空则使用 BepInEx/plugins/BepInExTranslator/translations.json
+CacheFilePath =
+
+[HttpJsonTemplate]
+Url = https://example.invalid/translate
+Method = POST
+BodyTemplate = {"text":"{{text}}","target":"{{target_lang}}"}
+ResponseJsonPath = translation
+## 每行一条：Key: Value
+Headers = Authorization: Bearer YOUR_TOKEN_HERE
+
+[OpenAiCompatible]
+Endpoint = https://api.openai.com/v1/chat/completions
+ApiKey =
+Model = gpt-4o-mini
+SystemPrompt = You are a translator. Translate the user message into {{target_lang}}. Reply with only the translation, no quotes or explanation.
+
+[Layout]
+AutoResizeFont = true
+MinFontScale = 0.5
+MinFontSize = 8
+
+[Font]
+## Default | BuiltIn | System | CustomFile
+Source = System
+SystemFontName = Microsoft YaHei
+CustomFontPath =
+
+[Hooks]
+EnableUguiText = true
+EnableTextMeshPro = true
+EnableTextMesh = true
