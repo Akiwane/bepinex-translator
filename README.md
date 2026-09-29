@@ -6,7 +6,7 @@ v1.0 **无**游戏内/桌面配置 UI，仅使用 BepInEx ConfigFile + JSON 翻�
 
 构建步骤见 [`BUILD.md`](BUILD.md)。
 
-> **简要说明**：本项目为非官方第三方个人/学习用途工具，与 Unity、BepInEx 及任何游戏发行商无关；使用风险自负，详见下方[免责声明](#免责声明--disclaimer)。项目含 AI 辅助产出内容，详见 [AI 声明](#ai-声明--ai-disclosure)。以 [MIT License](./LICENSE) 发布；**切勿**提交 API 密钥。
+> **简要说明**：本项目为非官方第三方个人/学习用途工具，与 Unity、BepInEx 及任何游戏发行商无关；使用风险自负，详见下方[免责声明](#免责声明--disclaimer)。本项目为**纯 AI 编程**产出，详见 [AI 声明](#ai-声明--ai-disclosure)。以 [MIT License](./LICENSE) 发布；**切勿**提交 API 密钥。
 
 ## 配置与样例（字段契约）
 
@@ -182,7 +182,7 @@ dotnet build src/Injector.Gui/Injector.Gui.csproj -c Release
 
 ## AI 声明 / AI disclosure
 
-本项目的相当一部分内容（需求、代码、文档等）由 AI 编程助手生成或协助完成。
+本项目为**纯 AI 编程**（pure AI programming）产出：需求、代码、文档等均由 AI 完成，而非「AI 辅助人工编写」。
 
 - 合并或发布前仍需**人工审阅**。
 - **不保证**正确性、完整性或安全性；请自行验证后再用于生产或对外分发。
