@@ -15,6 +15,8 @@ public enum InjectorErrorKind
     PermissionDenied = 7,
     Cancelled = 8,
     Unexpected = 9,
+    /// <summary>目标路径上文件与目录类型冲突（非权限问题）。</summary>
+    PathConflict = 10,
 }
 
 public sealed class InjectorError
@@ -45,6 +47,9 @@ public sealed class InjectorError
 
     public static InjectorError PermissionDenied(string message, string? detail = null) =>
         new() { Kind = InjectorErrorKind.PermissionDenied, Message = message, Detail = detail };
+
+    public static InjectorError PathConflict(string message, string? detail = null) =>
+        new() { Kind = InjectorErrorKind.PathConflict, Message = message, Detail = detail };
 
     public static InjectorError Cancelled(string message = "操作已取消。") =>
         new() { Kind = InjectorErrorKind.Cancelled, Message = message };
