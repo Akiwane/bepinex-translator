@@ -1,153 +1,258 @@
 using System;
-using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using BepInEx.Logging;
+using BepInExTranslator.Core;
 using BepInExTranslator.Services;
 using HarmonyLib;
 
 namespace BepInExTranslator.Hooks
 {
+    /// <summary>
+    /// IL2CPP：反射安装 UGUI / TMP / TextMesh 文本 Hook。
+    /// 支持强制加载 interop 后立即挂钩，以及后续延迟重试（程序集晚到）。
+    /// </summary>
     public static class TextHookInstaller
     {
+        private static readonly object Gate = new object();
+        private static DeferredHookTracker? _tracker;
+        private static Harmony? _harmony;
+        private static ManualLogSource? _log;
+        private static bool _assemblyLoadHooked;
+        private static int _retryPasses;
+        private const int MaxRetryPasses = 64;
+
+        /// <summary>
+        /// 首次应用：强制加载 interop → 构建待办 → 立即尝试 → 订阅 AssemblyLoad。
+        /// </summary>
         public static void Apply(Harmony harmony, ManualLogSource log)
         {
-            var settings = TranslatorPlugin.Settings;
-
-            if (settings.EnableUgui.Value)
+            lock (Gate)
             {
-                TryPatchSetter(harmony, log, "UnityEngine.UI.Text", "UnityEngine.UI", "text");
-            }
+                _harmony = harmony ?? throw new ArgumentNullException(nameof(harmony));
+                _log = log ?? throw new ArgumentNullException(nameof(log));
 
-            if (settings.EnableTextMesh.Value)
-            {
-                TryPatchSetter(harmony, log, "UnityEngine.TextMesh", null, "text");
-            }
+                // 关键：未引用的 interop DLL 不会进入 AppDomain
+                Il2CppInteropAssemblyLoader.EnsureLoaded(log);
 
-            if (settings.EnableTextMeshPro.Value)
-            {
-                if (!TryPatchSetter(harmony, log, "TMPro.TMP_Text", "Unity.TextMeshPro", "text"))
-                {
-                    TryPatchSetter(harmony, log, "TMPro.TMP_Text", "TextMeshPro", "text");
-                }
+                var settings = TranslatorPlugin.Settings;
+                var targets = DefaultTextHookTargets.Create(
+                    settings.EnableUgui.Value,
+                    settings.EnableTextMesh.Value,
+                    settings.EnableTextMeshPro.Value);
+                _tracker = new DeferredHookTracker(targets);
 
-                TryPatchMethod(harmony, log, "TMPro.TMP_Text", new[] { "Unity.TextMeshPro", "TextMeshPro" },
-                    "SetText", new[] { typeof(string) });
+                TryInstallPending_NoLock(forceLogMisses: true);
+                EnsureAssemblyLoadSubscription_NoLock();
             }
         }
 
-        private static bool TryPatchSetter(
-            Harmony harmony,
-            ManualLogSource log,
-            string typeName,
-            string? preferredAssembly,
-            string propertyName)
+        /// <summary>
+        /// 由主线程泵或 AssemblyLoad 触发的重试。
+        /// </summary>
+        public static void RetryPending(bool quiet = true)
         {
-            try
+            lock (Gate)
             {
-                var type = FindType(typeName, preferredAssembly);
-                if (type == null)
+                if (_tracker == null || _harmony == null || _log == null)
                 {
-                    log.LogInfo($"Type not found, skip hook: {typeName}");
-                    return false;
+                    return;
                 }
 
-                var prop = type.GetProperty(propertyName, BindingFlags.Instance | BindingFlags.Public);
-                var setter = prop?.GetSetMethod();
-                if (setter == null)
+                if (_tracker.IsComplete)
                 {
-                    log.LogWarning($"No public setter for {typeName}.{propertyName}");
-                    return false;
+                    return;
                 }
 
-                var prefix = typeof(TextHooks).GetMethod(nameof(TextHooks.PrefixSetText), BindingFlags.Static | BindingFlags.Public);
-                harmony.Patch(setter, prefix: new HarmonyMethod(prefix));
-                log.LogInfo($"Hooked {typeName}.{propertyName} setter");
-                return true;
-            }
-            catch (Exception ex)
-            {
-                log.LogWarning($"Failed to hook {typeName}: {ex.Message}");
-                return false;
+                if (_retryPasses >= MaxRetryPasses)
+                {
+                    return;
+                }
+
+                _retryPasses++;
+                // 晚到的程序集：再确保 loader 已跑过（幂等）
+                Il2CppInteropAssemblyLoader.EnsureLoaded(_log);
+                TryInstallPending_NoLock(forceLogMisses: !quiet && _retryPasses == MaxRetryPasses);
             }
         }
 
-        private static bool TryPatchMethod(
-            Harmony harmony,
-            ManualLogSource log,
-            string typeName,
-            IEnumerable<string> assemblies,
-            string methodName,
-            Type[] parameters)
+        /// <summary>是否仍有未挂钩目标（测试/诊断用）。</summary>
+        public static int PendingCount
         {
-            try
+            get
             {
-                Type? type = null;
-                foreach (var asm in assemblies)
+                lock (Gate)
                 {
-                    type = FindType(typeName, asm);
-                    if (type != null)
-                    {
-                        break;
-                    }
+                    return _tracker?.PendingCount ?? 0;
                 }
-
-                type ??= FindType(typeName, null);
-                if (type == null)
-                {
-                    return false;
-                }
-
-                var method = type.GetMethod(methodName, BindingFlags.Instance | BindingFlags.Public, null, parameters, null);
-                if (method == null)
-                {
-                    return false;
-                }
-
-                var prefix = typeof(TextHooks).GetMethod(nameof(TextHooks.PrefixSetTextMethod), BindingFlags.Static | BindingFlags.Public);
-                harmony.Patch(method, prefix: new HarmonyMethod(prefix));
-                log.LogInfo($"Hooked {typeName}.{methodName}(string)");
-                return true;
-            }
-            catch (Exception ex)
-            {
-                log.LogWarning($"Failed to hook {typeName}.{methodName}: {ex.Message}");
-                return false;
             }
         }
 
-        private static Type? FindType(string typeName, string? preferredAssembly)
+        private static void EnsureAssemblyLoadSubscription_NoLock()
         {
-            if (!string.IsNullOrEmpty(preferredAssembly))
+            if (_assemblyLoadHooked)
             {
-                var asm = AppDomain.CurrentDomain.GetAssemblies()
-                    .FirstOrDefault(a => string.Equals(a.GetName().Name, preferredAssembly, StringComparison.OrdinalIgnoreCase));
-                var t = asm?.GetType(typeName, throwOnError: false);
-                if (t != null)
-                {
-                    return t;
-                }
+                return;
             }
 
-            foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
+            _assemblyLoadHooked = true;
+            AppDomain.CurrentDomain.AssemblyLoad += (_, __) =>
             {
-                Type? t = null;
                 try
                 {
-                    t = asm.GetType(typeName, throwOnError: false);
+                    RetryPending(quiet: true);
                 }
                 catch
                 {
                     // ignore
                 }
+            };
+        }
 
-                if (t != null)
+        private static void TryInstallPending_NoLock(bool forceLogMisses)
+        {
+            var tracker = _tracker!;
+            var harmony = _harmony!;
+            var log = _log!;
+            var pending = tracker.Pending;
+
+            foreach (var target in pending)
+            {
+                var ok = target.Kind switch
                 {
-                    return t;
+                    DeferredHookMemberKind.StringPropertySetter =>
+                        TryPatchStringSetter(harmony, log, target, forceLogMisses),
+                    DeferredHookMemberKind.StringMethod =>
+                        TryPatchStringMethod(harmony, log, target, forceLogMisses),
+                    _ => false,
+                };
+
+                if (ok)
+                {
+                    tracker.MarkCompleted(target.Key);
                 }
             }
 
-            return null;
+            if (tracker.IsComplete)
+            {
+                log.LogInfo("IL2CPP text hooks: all requested targets attached.");
+            }
+            else if (forceLogMisses)
+            {
+                var still = string.Join(", ", tracker.Pending.Select(t => t.Key));
+                log.LogInfo(
+                    $"IL2CPP text hooks pending ({tracker.PendingCount}): {still}. " +
+                    "Will retry as interop assemblies load / on main-thread pump.");
+            }
+        }
+
+        private static bool TryPatchStringSetter(
+            Harmony harmony,
+            ManualLogSource log,
+            DeferredHookTarget target,
+            bool logMiss)
+        {
+            try
+            {
+                var type = ResolveType(target);
+                if (type == null)
+                {
+                    if (logMiss)
+                    {
+                        log.LogInfo($"Type not found (will retry): {target.TypeName} [{target.Key}]");
+                    }
+
+                    return false;
+                }
+
+                var setter = ManagedTypeResolver.FindStringSetter(type, target.MemberName);
+                if (setter == null)
+                {
+                    log.LogWarning($"No string setter for {target.TypeName}.{target.MemberName}");
+                    // 类型已在但成员缺失：视为完成以免无限重试
+                    return true;
+                }
+
+                var prefix = typeof(TextHooks).GetMethod(
+                    nameof(TextHooks.PrefixSetText),
+                    BindingFlags.Static | BindingFlags.Public);
+                harmony.Patch(setter, prefix: new HarmonyMethod(prefix));
+                log.LogInfo($"Hooked {target.TypeName}.{target.MemberName} setter [{target.Key}]");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                log.LogWarning($"Failed to hook {target.Key}: {ex.Message}");
+                return false;
+            }
+        }
+
+        private static bool TryPatchStringMethod(
+            Harmony harmony,
+            ManualLogSource log,
+            DeferredHookTarget target,
+            bool logMiss)
+        {
+            try
+            {
+                var type = ResolveType(target);
+                if (type == null)
+                {
+                    if (logMiss)
+                    {
+                        log.LogInfo($"Type not found (will retry): {target.TypeName} [{target.Key}]");
+                    }
+
+                    return false;
+                }
+
+                var method = type.GetMethod(
+                    target.MemberName,
+                    BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
+                    null,
+                    new[] { typeof(string) },
+                    null);
+
+                // Il2Cpp 上 SetText 可能参数不是 System.String
+                if (method == null)
+                {
+                    method = type.GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
+                        .FirstOrDefault(m =>
+                            string.Equals(m.Name, target.MemberName, StringComparison.Ordinal)
+                            && m.GetParameters().Length == 1);
+                }
+
+                if (method == null)
+                {
+                    if (logMiss)
+                    {
+                        log.LogDebug($"Method not found: {target.TypeName}.{target.MemberName}(string)");
+                    }
+
+                    // 可选方法：找不到则完成，避免挡住其它目标
+                    return true;
+                }
+
+                var prefix = typeof(TextHooks).GetMethod(
+                    nameof(TextHooks.PrefixSetTextMethod),
+                    BindingFlags.Static | BindingFlags.Public);
+                harmony.Patch(method, prefix: new HarmonyMethod(prefix));
+                log.LogInfo($"Hooked {target.TypeName}.{target.MemberName}(string) [{target.Key}]");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                log.LogWarning($"Failed to hook {target.Key}: {ex.Message}");
+                return false;
+            }
+        }
+
+        private static Type? ResolveType(DeferredHookTarget target)
+        {
+            return ManagedTypeResolver.FindType(
+                AppDomain.CurrentDomain.GetAssemblies(),
+                target.TypeName,
+                target.PreferredAssemblies);
         }
     }
 
@@ -174,14 +279,19 @@ namespace BepInExTranslator.Hooks
             try
             {
                 var type = instance.GetType();
-                var prop = type.GetProperty("text", BindingFlags.Instance | BindingFlags.Public);
-                if (prop != null && prop.CanWrite)
+                var setter = ManagedTypeResolver.FindStringSetter(type, "text");
+                if (setter != null)
                 {
-                    prop.SetValue(instance, translated);
+                    setter.Invoke(instance, new object[] { translated });
                     return;
                 }
 
-                var setText = type.GetMethod("SetText", BindingFlags.Instance | BindingFlags.Public, null, new[] { typeof(string) }, null);
+                var setText = type.GetMethod(
+                    "SetText",
+                    BindingFlags.Instance | BindingFlags.Public,
+                    null,
+                    new[] { typeof(string) },
+                    null);
                 setText?.Invoke(instance, new object[] { translated });
             }
             catch

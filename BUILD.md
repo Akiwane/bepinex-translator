@@ -74,11 +74,12 @@ dotnet build src/BepInExTranslator.Plugin.Il2Cpp/BepInExTranslator.Plugin.Il2Cpp
 
 输出：`artifacts/il2cpp/` → 同上目录结构，但必须搭配 **BepInEx 6 Unity IL2CPP**。
 
-### IL2CPP 限制（非保证）
+### IL2CPP 运行时说明
 
 1. Mono 版 DLL 无法在 IL2CPP 游戏中加载。
-2. 通用构建不内置 Il2Cpp `MonoBehaviour` 泵：缓存命中仍同步替换；异步新译文会尝试直接回写，失败则写入 JSON，下次启动生效。游戏特化可注册自定义组件每帧调用 `UnityMainThread.Pump()`。
-3. TMP / 字体 API 因引擎版本与裁剪而异，见 [`docs/fonts.md`](docs/fonts.md)。
+2. **Interop 强制加载**：插件在 `Load` 时会加载 `BepInEx/interop`（或 BepInEx 配置的 IL2CPP interop 路径）下的代理程序集。通用插件不编译期引用 `UnityEngine.UI` / TMP，若不强制加载，`AppDomain` 中找不到类型，Hook 会被全部跳过。装载后会立即挂钩，并在 `AssemblyLoad` / 主线程泵上延迟重试。
+3. **主线程泵（通用）**：不依赖游戏特化 `MonoBehaviour`。优先 Harmony 挂钩 `UnityEngine.Canvas.SendWillRenderCanvases`（及少数回退候选）以泵送 `UnityMainThread` 队列；若 Canvas 尚未解析，则尽量挂钩场景切换仅用于重试 Hook。日志出现 `IL2CPP main-thread pump enabled via …` 即成功路径。
+4. TMP / 字体 API 因引擎版本与裁剪而异，见 [`docs/fonts.md`](docs/fonts.md)。
 
 ## 配置与产物位置
 
@@ -104,6 +105,8 @@ dotnet test BepInExTranslator.sln -c Release
 |------|------|
 | 插件未加载 | BepInEx 版本是否与 Mono/IL2CPP 匹配；`BepInEx/LogOutput.log` |
 | 无翻译请求 | 产物非空译文？`BackendType` / `EndpointUrl` / `ApiKey` |
-| 有译文但不显示 | 自定义 UI？日志是否有 `Hooked …` |
+| 有译文但不显示 | 自定义 UI？日志是否有 `Hooked …` / `IL2CPP text hooks: all requested targets attached` |
+| IL2CPP 全部 Type not found | 是否存在 `BepInEx/interop`？日志是否有 `IL2CPP interop force-load` |
+| IL2CPP 异步译文不刷新 | 日志是否有 `IL2CPP main-thread pump enabled via …` |
 | 中文方块 | `FontSourceType` / `FontPath`（docs/fonts.md） |
 | IL2CPP 崩溃 | 先关 `EnableTextMeshPro` 二分 |

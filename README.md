@@ -159,6 +159,8 @@ FontPath = Microsoft YaHei
 | 工程 | `src/BepInExTranslator.Plugin` | `src/BepInExTranslator.Plugin.Il2Cpp` |
 | TFM | `net472` | `net6.0` |
 | 输出 | `artifacts/mono/` | `artifacts/il2cpp/` |
+| 文本 Hook | 反射挂 `UnityEngine.UI` / TMP / TextMesh | 强制加载 `BepInEx/interop` 后挂同一批类型；延迟重试 |
+| 主线程泵 | 插件 `Update` | Harmony 挂 Canvas 帧回调（无游戏特化 MonoBehaviour） |
 
 共享逻辑在 `BepInExTranslator.Core`。细节见 [`BUILD.md`](BUILD.md)。
 
