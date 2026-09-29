@@ -6,6 +6,16 @@ v1.0 **无**游戏内/桌面配置 UI，仅使用 BepInEx ConfigFile + JSON 翻�
 
 权威需求见 [`REQUIREMENTS.md`](REQUIREMENTS.md)、[`DECISIONS.md`](DECISIONS.md)、[`TEST-CASES.md`](TEST-CASES.md)。构建步骤见 [`BUILD.md`](BUILD.md)。
 
+## 注入器 GUI（v1.1 · Windows only）
+
+独立桌面注入器：选择游戏目录/exe → 探测 Unity / Mono·IL2CPP →（后续）自动下载匹配 BepInEx + 本模组并写入标准布局。详见 [`docs/injector.md`](docs/injector.md) 与 REQUIREMENTS §7。
+
+```bash
+dotnet run --project src/Injector.Gui
+```
+
+当前 PR 为 **UI + Core 契约 + stub 安装**（`GameProbe` 真实探测，`StubInstaller` 模拟进度，默认不下载大包）。完整端到端安装待后端替换 stub。
+
 ## 配置与样例（字段契约）
 
 下列文件中的**字段名是插件后端的实现契约**。后端按这些名字接线；**切勿**把真实 API 密钥提交进仓库。
@@ -150,6 +160,8 @@ FontPath = Microsoft YaHei
 dotnet test BepInExTranslator.sln
 dotnet build src/BepInExTranslator.Plugin/BepInExTranslator.Plugin.csproj -c Release
 dotnet build src/BepInExTranslator.Plugin.Il2Cpp/BepInExTranslator.Plugin.Il2Cpp.csproj -c Release
+dotnet build src/Injector.Core/Injector.Core.csproj
+dotnet build src/Injector.Gui/Injector.Gui.csproj   # Linux CI 可编译；GUI 运行面向 Windows
 ```
 
 ## 许可证与安全

@@ -9,6 +9,10 @@ artifacts/
 *.mdb
 *.exe
 !samples/**
+# Probe fixtures need placeholder Unity layout files (exe/dll names) for heuristics.
+!tests/fixtures/**/*.exe
+!tests/fixtures/**/*.dll
+!tests/fixtures/**/*.dat
 
 ## IDE
 .vs/

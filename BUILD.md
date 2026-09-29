@@ -17,9 +17,14 @@ src/
   BepInExTranslator.Core/           # 纯逻辑（netstandard2.0）
   BepInExTranslator.Plugin/         # BepInEx 5 Mono 插件（net472）
   BepInExTranslator.Plugin.Il2Cpp/  # BepInEx 6 IL2CPP 插件（net6.0）
+  Injector.Core/                    # 注入器契约 + 探测 + stub（net8.0）
+  Injector.Gui/                     # Avalonia 注入器 GUI（net8.0，产品 Windows only）
 tests/
   BepInExTranslator.Core.Tests/     # 无 Unity 的单元测试
+  Injector.Core.Tests/              # 注入器探测 / stub 安装测试
+  fixtures/                         # Mono / IL2CPP / 无效路径探测桩
 artifacts/mono|il2cpp/              # 构建输出（gitignore）
+docs/injector.md                    # 注入器运行说明与 §7 映射
 ```
 
 ## 单元测试（不需要 Unity）

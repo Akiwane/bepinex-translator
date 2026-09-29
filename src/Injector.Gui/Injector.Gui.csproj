@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>Injector.Gui</RootNamespace>
+    <AssemblyName>Injector.Gui</AssemblyName>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
+    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+    <!--
+      v1.1 product is Windows-only (REQUIREMENTS §7), but TFM stays net8.0 so
+      `dotnet build` succeeds on Linux CI (headless compile). Runtime GUI is
+      intended for Windows; see docs/injector.md.
+    -->
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="11.2.3" />
+    <PackageReference Include="Avalonia.Desktop" Version="11.2.3" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="11.2.3" />
+    <PackageReference Include="Avalonia.Fonts.Inter" Version="11.2.3" />
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.3.2" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="8.0.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Injector.Core\Injector.Core.csproj" />
+  </ItemGroup>
+
+  <!-- Ship config example next to the GUI so stub CopyingConfig can find it. -->
+  <ItemGroup>
+    <None Include="..\..\config\Translator.cfg.example" Link="config\Translator.cfg.example" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

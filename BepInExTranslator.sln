@@ -1,4 +1,4 @@
-Microsoft Visual Studio Solution File, Format Version 12.00
+﻿Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.0.31903.59
 MinimumVisualStudioVersion = 10.0.40219.1
@@ -9,6 +9,16 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BepInExTranslator.Plugin.Il2Cpp", "src\BepInExTranslator.Plugin.Il2Cpp\BepInExTranslator.Plugin.Il2Cpp.csproj", "{A3333333-3333-3333-3333-333333333333}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BepInExTranslator.Core.Tests", "tests\BepInExTranslator.Core.Tests\BepInExTranslator.Core.Tests.csproj", "{A4444444-4444-4444-4444-444444444444}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{452D6F6B-3198-4F08-8D7C-0DB7CB262FA1}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Injector.Core", "src\Injector.Core\Injector.Core.csproj", "{F4B345E9-61AD-42B3-A00C-D49F78C8FDE4}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Injector.Gui", "src\Injector.Gui\Injector.Gui.csproj", "{33E02C85-1CA5-4DFD-A421-307A1482B7AA}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{16DA5F1C-F8BC-4546-A5D5-D59441607CFE}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Injector.Core.Tests", "tests\Injector.Core.Tests\Injector.Core.Tests.csproj", "{CF4D601C-A79B-4D06-8AB3-F973C6D677DE}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -32,5 +42,22 @@ Global
 		{A4444444-4444-4444-4444-444444444444}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{A4444444-4444-4444-4444-444444444444}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{A4444444-4444-4444-4444-444444444444}.Release|Any CPU.Build.0 = Release|Any CPU
+		{F4B345E9-61AD-42B3-A00C-D49F78C8FDE4}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F4B345E9-61AD-42B3-A00C-D49F78C8FDE4}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F4B345E9-61AD-42B3-A00C-D49F78C8FDE4}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F4B345E9-61AD-42B3-A00C-D49F78C8FDE4}.Release|Any CPU.Build.0 = Release|Any CPU
+		{33E02C85-1CA5-4DFD-A421-307A1482B7AA}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{33E02C85-1CA5-4DFD-A421-307A1482B7AA}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{33E02C85-1CA5-4DFD-A421-307A1482B7AA}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{33E02C85-1CA5-4DFD-A421-307A1482B7AA}.Release|Any CPU.Build.0 = Release|Any CPU
+		{CF4D601C-A79B-4D06-8AB3-F973C6D677DE}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{CF4D601C-A79B-4D06-8AB3-F973C6D677DE}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{CF4D601C-A79B-4D06-8AB3-F973C6D677DE}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{CF4D601C-A79B-4D06-8AB3-F973C6D677DE}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{F4B345E9-61AD-42B3-A00C-D49F78C8FDE4} = {452D6F6B-3198-4F08-8D7C-0DB7CB262FA1}
+		{33E02C85-1CA5-4DFD-A421-307A1482B7AA} = {452D6F6B-3198-4F08-8D7C-0DB7CB262FA1}
+		{CF4D601C-A79B-4D06-8AB3-F973C6D677DE} = {16DA5F1C-F8BC-4546-A5D5-D59441607CFE}
 	EndGlobalSection
 EndGlobal
