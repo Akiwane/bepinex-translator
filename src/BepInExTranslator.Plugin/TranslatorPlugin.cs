@@ -19,7 +19,7 @@ namespace BepInExTranslator
     {
         public const string PluginGuid = "com.akiwane.bepinextranslator";
         public const string PluginName = "BepInEx Translator";
-        public const string PluginVersion = "1.0.0";
+        public const string PluginVersion = "1.0.0-beta";
 
         internal static ManualLogSource Log = null!;
         internal static PluginSettings Settings = null!;
