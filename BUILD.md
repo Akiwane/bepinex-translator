@@ -13,18 +13,17 @@
 config/Translator.cfg.example       # 配置字段契约（权威）
 docs/fonts.md                       # 三字体源路径说明
 docs/translations.example.json      # 产物 JSON 样例
+docs/injector.md                    # Windows 注入器 GUI（§7）
 src/
   BepInExTranslator.Core/           # 纯逻辑（netstandard2.0）
   BepInExTranslator.Plugin/         # BepInEx 5 Mono 插件（net472）
   BepInExTranslator.Plugin.Il2Cpp/  # BepInEx 6 IL2CPP 插件（net6.0）
-  Injector.Core/                    # 注入器契约 + 探测 + stub（net8.0）
-  Injector.Gui/                     # Avalonia 注入器 GUI（net8.0，产品 Windows only）
+  Injector.Core/                    # 注入器核心（探测/下载/布局；PR #7）
+  Injector.Gui/                     # Avalonia 完整 GUI（选游戏→探测→安装）
 tests/
   BepInExTranslator.Core.Tests/     # 无 Unity 的单元测试
-  Injector.Core.Tests/              # 注入器探测 / stub 安装测试
-  fixtures/                         # Mono / IL2CPP / 无效路径探测桩
+  Injector.Core.Tests/
 artifacts/mono|il2cpp/              # 构建输出（gitignore）
-docs/injector.md                    # 注入器运行说明与 §7 映射
 ```
 
 ## 单元测试（不需要 Unity）
@@ -33,7 +32,22 @@ docs/injector.md                    # 注入器运行说明与 §7 映射
 dotnet test BepInExTranslator.sln -c Release
 ```
 
-覆盖：`TextHasher`、`TemplateFiller`（含 `{source}`/`{targetLanguage}`/`{hash}`）、`TranslationCache`、`FontSizeAdjuster`、`JsonPathExtractor`（含 `choices.0.message.content`）、按需翻译跳过 API。
+覆盖：`TextHasher`、`TemplateFiller`（含 `{source}`/`{targetLanguage}`/`{hash}`）、`TranslationCache`、`FontSizeAdjuster`、`JsonPathExtractor`（含 `choices.0.message.content`）、按需翻译跳过 API；以及注入器探测桩（Mono/IL2CPP）、布局规划与本地 zip 落盘。
+
+## Windows 注入器
+
+详见 [`docs/injector.md`](docs/injector.md)。**Core** 为可测安装逻辑（PR #7）；**Gui** 为完整 Avalonia UI（本 PR，绑定 #7 API）。
+
+```bash
+dotnet build src/Injector.Core/Injector.Core.csproj -c Release
+dotnet build src/Injector.Gui/Injector.Gui.csproj -c Release
+dotnet run --project src/Injector.Gui
+dotnet test tests/Injector.Core.Tests -c Release
+```
+
+默认 BepInEx pin：Mono → `5.4.23.5` win-x64；IL2CPP → `6.0.0-pre.2` Unity.IL2CPP win-x64。模组资产 `BepInExTranslator-{mono|il2cpp}-win.zip`，优先 `artifacts/mono|il2cpp`。
+
+公共契约：`IGameProbe` / `IPackageResolver` / `IInstaller` + `InjectorError` / `InstallProgress`（命名空间 `BepInExTranslator.Injector.Core`）。
 
 ## 构建 Mono 插件（BepInEx 5）
 

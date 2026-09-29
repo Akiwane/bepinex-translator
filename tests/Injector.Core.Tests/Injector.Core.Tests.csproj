@@ -5,7 +5,8 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <IsPackable>false</IsPackable>
-    <RootNamespace>Injector.Core.Tests</RootNamespace>
+    <IsTestProject>true</IsTestProject>
+    <RootNamespace>BepInExTranslator.Injector.Core.Tests</RootNamespace>
   </PropertyGroup>
 
   <ItemGroup>
@@ -21,8 +22,7 @@
     <ProjectReference Include="..\..\src\Injector.Core\Injector.Core.csproj" />
   </ItemGroup>
 
-  <!-- Copy probe fixtures next to the test assembly for stable paths. -->
   <ItemGroup>
-    <None Include="..\fixtures\**\*" Link="fixtures\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <Using Include="Xunit" />
   </ItemGroup>
 </Project>

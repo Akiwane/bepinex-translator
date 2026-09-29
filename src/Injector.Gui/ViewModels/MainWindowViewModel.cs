@@ -1,9 +1,8 @@
 using Avalonia.Platform.Storage;
+using BepInExTranslator.Injector.Core;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using Injector.Core.Abstractions;
-using Injector.Core.Localization;
-using Injector.Core.Models;
+using Injector.Gui.Services;
 
 namespace Injector.Gui.ViewModels;
 
@@ -11,19 +10,36 @@ public partial class MainWindowViewModel : ObservableObject
 {
     private readonly IGameProbe _gameProbe;
     private readonly IInstaller _installer;
+    private readonly PackageSourceOptions _packageSources;
+    private readonly GuiRuntimeOptions _runtimeOptions;
     private CancellationTokenSource? _installCts;
-    private GameProbeResult? _lastProbe;
+    private GameDetectionResult? _lastDetection;
 
-    public MainWindowViewModel(IGameProbe gameProbe, IInstaller installer)
+    public MainWindowViewModel(
+        IGameProbe gameProbe,
+        IInstaller installer,
+        PackageSourceOptions packageSources,
+        GuiRuntimeOptions runtimeOptions)
     {
         _gameProbe = gameProbe;
         _installer = installer;
+        _packageSources = packageSources;
+        _runtimeOptions = runtimeOptions;
         StatusText = UiStrings.Ready;
-        StubNote = UiStrings.StubNote;
+        SelectedOverwriteItem = OverwritePolicies.First(p => p.Policy == _runtimeOptions.DefaultOverwritePolicy);
+        PinNote =
+            $"BepInEx pin：Mono={PackageCatalog.BepInEx5Version}；IL2CPP={PackageCatalog.BepInEx6Version}。" +
+            $" 模组资产：{PackageCatalog.DefaultTranslatorReleaseAssetPattern}；优先本地 artifacts/。";
     }
 
-    /// <summary>Injected by the view so Browse commands can open storage pickers.</summary>
     public IStorageProvider? StorageProvider { get; set; }
+
+    public IReadOnlyList<OverwritePolicyItem> OverwritePolicies { get; } =
+    [
+        new(OverwritePolicy.BackupThenOverwrite, UiStrings.PolicyBackup),
+        new(OverwritePolicy.SkipExisting, UiStrings.PolicySkip),
+        new(OverwritePolicy.Overwrite, UiStrings.PolicyOverwrite),
+    ];
 
     [ObservableProperty]
     private string _gamePath = string.Empty;
@@ -38,12 +54,14 @@ public partial class MainWindowViewModel : ObservableObject
     private string _evidenceText = UiStrings.NotDetected;
 
     [ObservableProperty]
+    private string _notesText = string.Empty;
+
+    [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(InstallCommand))]
     private bool _canInstall;
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(InstallCommand))]
-    [NotifyCanExecuteChangedFor(nameof(OverwriteInstallCommand))]
     private bool _isBusy;
 
     [ObservableProperty]
@@ -65,10 +83,12 @@ public partial class MainWindowViewModel : ObservableObject
     private BannerKind _bannerKind = BannerKind.None;
 
     [ObservableProperty]
-    private bool _showOverwriteActions;
+    private OverwritePolicyItem _selectedOverwriteItem;
+
+    public OverwritePolicy SelectedOverwritePolicy => SelectedOverwriteItem.Policy;
 
     [ObservableProperty]
-    private string _stubNote = string.Empty;
+    private string _pinNote = string.Empty;
 
     public bool IsErrorBanner => BannerKind == BannerKind.Error;
     public bool IsWarningBanner => BannerKind == BannerKind.Warning;
@@ -83,9 +103,10 @@ public partial class MainWindowViewModel : ObservableObject
     public string UnityVersionLabel => UiStrings.UnityVersion;
     public string RuntimeLabel => UiStrings.Runtime;
     public string EvidenceLabel => UiStrings.Evidence;
+    public string NotesLabel => UiStrings.Notes;
     public string InstallButtonLabel => UiStrings.InstallButton;
-    public string OverwriteLabel => UiStrings.OverwriteAndInstall;
-    public string SkipLabel => UiStrings.SkipInstall;
+    public string OverwritePolicyLabel => UiStrings.OverwritePolicyLabel;
+    public string ProbeHint => UiStrings.ProbeHint;
 
     [RelayCommand]
     private async Task BrowseFolderAsync()
@@ -130,10 +151,7 @@ public partial class MainWindowViewModel : ObservableObject
                 AllowMultiple = false,
                 FileTypeFilter =
                 [
-                    new FilePickerFileType("游戏可执行文件")
-                    {
-                        Patterns = ["*.exe"],
-                    },
+                    new FilePickerFileType("游戏可执行文件") { Patterns = ["*.exe"] },
                 ],
             });
 
@@ -159,134 +177,131 @@ public partial class MainWindowViewModel : ObservableObject
         }
     }
 
-    partial void OnGamePathChanged(string value)
-    {
-        ClearBanner();
-        ShowOverwriteActions = false;
-    }
+    partial void OnGamePathChanged(string value) => ClearBanner();
 
     private void RunProbe(string path)
     {
         StatusText = UiStrings.Probing;
         ClearBanner();
-        ShowOverwriteActions = false;
 
-        GameProbeResult result = _gameProbe.Detect(path);
-        _lastProbe = result;
-        GamePath = result.GamePath;
+        GameDetectionResult result = _gameProbe.Detect(path);
+        _lastDetection = result;
+        GamePath = result.GameRoot;
 
-        UnityVersionText = result.UnityVersion ?? (result.IsValid ? UiStrings.Unknown : UiStrings.NotDetected);
-        RuntimeText = result.IsValid || result.Runtime != RuntimeKind.Unknown
-            ? UiStrings.RuntimeLabel(result.Runtime)
-            : UiStrings.NotDetected;
-        EvidenceText = string.IsNullOrWhiteSpace(result.Evidence)
+        UnityVersionText = result.UnityVersion ?? UiStrings.Unknown;
+        RuntimeText = result.RuntimeDisplayName;
+        EvidenceText = result.EvidencePaths.Count == 0
             ? UiStrings.NotDetected
-            : result.Evidence;
+            : string.Join("\n", result.EvidencePaths);
+        NotesText = result.Notes.Count == 0
+            ? string.Empty
+            : string.Join("\n", result.Notes);
 
-        if (!result.IsValid)
+        bool installable = result.IsValidUnityGame
+                           && result.Runtime is UnityRuntimeKind.Mono or UnityRuntimeKind.Il2Cpp
+                           && result.Error is null;
+        CanInstall = installable;
+
+        if (result.Error is not null)
         {
-            CanInstall = false;
-            ShowError(result.ErrorMessage ?? UiStrings.ErrorMessage(result.ErrorCode ?? InstallErrorCode.Unexpected));
-            StatusText = UiStrings.Ready;
-            return;
+            ShowError(FormatDetectionError(result.Error));
+        }
+        else if (!installable)
+        {
+            ShowWarning(UiStrings.KindHint(InjectorErrorKind.UnknownRuntime));
         }
 
-        CanInstall = result.Runtime is RuntimeKind.Mono or RuntimeKind.Il2Cpp;
         StatusText = UiStrings.Ready;
     }
 
     private bool CanExecuteInstall() => CanInstall && !IsBusy;
 
     [RelayCommand(CanExecute = nameof(CanExecuteInstall))]
-    private Task InstallAsync() => RunInstallAsync(overwrite: false);
-
-    private bool CanExecuteOverwrite() => !IsBusy && ShowOverwriteActions;
-
-    [RelayCommand(CanExecute = nameof(CanExecuteOverwrite))]
-    private Task OverwriteInstallAsync() => RunInstallAsync(overwrite: true);
-
-    [RelayCommand]
-    private void SkipOverwrite()
+    private async Task InstallAsync()
     {
-        ShowOverwriteActions = false;
-        ClearBanner();
-        StatusText = UiStrings.Ready;
-    }
-
-    partial void OnShowOverwriteActionsChanged(bool value) =>
-        OverwriteInstallCommand.NotifyCanExecuteChanged();
-
-    private async Task RunInstallAsync(bool overwrite)
-    {
-        if (_lastProbe is null || !_lastProbe.IsValid)
+        if (_lastDetection is null
+            || !_lastDetection.IsValidUnityGame
+            || _lastDetection.Runtime is not (UnityRuntimeKind.Mono or UnityRuntimeKind.Il2Cpp))
         {
-            ShowError(UiStrings.ErrInvalidPath);
+            ShowError(UiStrings.KindHint(InjectorErrorKind.NotUnityGame));
             return;
         }
 
         _installCts?.Cancel();
         _installCts = new CancellationTokenSource();
         IsBusy = true;
-        ShowOverwriteActions = false;
         ClearBanner();
         StatusText = UiStrings.Installing;
         ProgressValue = 0;
         ProgressIsIndeterminate = true;
 
+        // Ensure RepositoryRoot / config example flow into Core each install.
+        if (!string.IsNullOrWhiteSpace(_runtimeOptions.RepositoryRoot))
+        {
+            _packageSources.RepositoryRoot = _runtimeOptions.RepositoryRoot;
+        }
+
+        var options = new InstallOptions
+        {
+            Detection = _lastDetection,
+            PackageSources = _packageSources,
+            OverwritePolicy = SelectedOverwriteItem.Policy,
+            ConfigExampleSourcePath = _runtimeOptions.ConfigExampleSourcePath,
+        };
+
         var progress = new Progress<InstallProgress>(OnProgress);
 
         try
         {
-            InstallResult result = await _installer.InstallAsync(
-                new InstallRequest
-                {
-                    GamePath = _lastProbe.GamePath,
-                    Probe = _lastProbe,
-                    Overwrite = overwrite,
-                },
-                progress,
-                _installCts.Token);
+            InstallResult result = await _installer.InstallAsync(options, progress, _installCts.Token);
 
             if (result.Success)
             {
-                ShowSuccess(result.Message);
-                StatusText = UiStrings.StageDone;
+                string msg = result.Messages.Count > 0
+                    ? string.Join("\n", result.Messages.TakeLast(3))
+                    : "安装完成。";
+                if (!string.IsNullOrWhiteSpace(result.BackupDirectory))
+                {
+                    msg += $"\n备份目录：{result.BackupDirectory}";
+                }
+
+                ShowSuccess(msg);
+                StatusText = "完成";
                 ProgressIsIndeterminate = false;
                 ProgressValue = 100;
             }
-            else if (result.AlreadyInstalled)
-            {
-                ShowWarning(result.Message);
-                ShowOverwriteActions = true;
-                StatusText = UiStrings.Ready;
-            }
             else
             {
-                ShowError(result.Message);
+                ShowError(FormatInstallError(result));
                 StatusText = UiStrings.Ready;
             }
         }
         catch (OperationCanceledException)
         {
-            ShowError(UiStrings.ErrCancelled);
+            ShowError(UiStrings.KindHint(InjectorErrorKind.Cancelled));
             StatusText = UiStrings.Ready;
         }
         catch (Exception ex)
         {
-            ShowError($"{UiStrings.ErrUnexpected} {ex.Message}");
+            ShowError($"{ex.Message}");
             StatusText = UiStrings.Ready;
         }
         finally
         {
             IsBusy = false;
-            CanInstall = _lastProbe is { IsValid: true, Runtime: RuntimeKind.Mono or RuntimeKind.Il2Cpp };
+            CanInstall = _lastDetection is
+            {
+                IsValidUnityGame: true,
+                Runtime: UnityRuntimeKind.Mono or UnityRuntimeKind.Il2Cpp,
+                Error: null,
+            };
         }
     }
 
     private void OnProgress(InstallProgress p)
     {
         StatusText = string.IsNullOrWhiteSpace(p.Message)
-            ? UiStrings.StageLabel(p.Stage)
+            ? p.Phase.ToString()
             : p.Message;
 
         if (p.Percent is int percent)
@@ -298,6 +313,27 @@ public partial class MainWindowViewModel : ObservableObject
         {
             ProgressIsIndeterminate = true;
         }
+    }
+
+    private static string FormatDetectionError(InjectorError error)
+    {
+        string hint = UiStrings.KindHint(error.Kind);
+        string body = UiStrings.FormatError(error);
+        return string.IsNullOrEmpty(hint) ? body : $"{body}\n{hint}";
+    }
+
+    private static string FormatInstallError(InstallResult result)
+    {
+        if (result.Error is not null)
+        {
+            string hint = UiStrings.KindHint(result.Error.Kind);
+            string body = UiStrings.FormatError(result.Error);
+            return string.IsNullOrEmpty(hint) ? body : $"{body}\n{hint}";
+        }
+
+        return result.Messages.Count > 0
+            ? string.Join("\n", result.Messages.TakeLast(3))
+            : "安装失败。";
     }
 
     private void ShowError(string message)
@@ -331,4 +367,9 @@ public enum BannerKind
     Error,
     Warning,
     Success,
+}
+
+public sealed record OverwritePolicyItem(OverwritePolicy Policy, string DisplayName)
+{
+    public override string ToString() => DisplayName;
 }
