@@ -2,7 +2,7 @@
 
 基于 [BepInEx](https://docs.bepinex.dev/) 的 Unity 游戏**通用按需翻译**插件：运行时 Hook `UGUI Text` / `TextMeshPro` / 旧版 `TextMesh`，把未本地化文本替换为目标语言（默认 **zh-CN**）。
 
-v1.0 **无**游戏内/桌面配置 UI，仅使用 BepInEx ConfigFile + JSON 翻译产物。
+当前产品版本：**1.0.0-beta**。v1.0 **无**游戏内/桌面配置 UI，仅使用 BepInEx ConfigFile + JSON 翻译产物。
 
 构建步骤见 [`BUILD.md`](BUILD.md)。
 
