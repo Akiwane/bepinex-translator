@@ -11,3 +11,6 @@
 | 2026-09-29 | 运行时：Mono + IL2CPP | 用户确认 |
 | 2026-09-29 | 普通 API：通用 HTTP JSON；LLM：OpenAI 兼容 Chat | 用户确认 |
 | 2026-09-29 | REQUIREMENTS 升为 v1.0 定稿 | 决策齐备 |
+| 2026-09-29 | v1 无配置 UI：仅 BepInEx config + JSON | 前端问，PM 定 |
+| 2026-09-29 | 产物 JSON：[{hash,source,translation}] | 可读+稳定键 |
+| 2026-09-29 | 前端起草示例配置/字体说明/JSON 样例进仓 | Q3 是 |

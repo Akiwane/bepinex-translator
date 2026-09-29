@@ -15,7 +15,8 @@
 | 文本源 | UGUI Text、TextMeshPro、旧版 TextMesh |
 | 翻译触发 | **按需**：遇未缓存原文再请求 |
 | 目标语言默认 | zh-CN（可配置） |
-| 产物格式 | JSON（键=原文或稳定 hash，值=译文；人工可改） |
+| 产物格式 | JSON 数组：`hash` + `source` + `translation`（人工可读；程序按 hash） |
+| 配置 UI | v1 **无**游戏内/桌面 UI；仅 BepInEx config + JSON |
 | 运行时 | Mono + IL2CPP |
 | 普通翻译默认 | 通用 HTTP JSON 模板（URL/头/体可配） |
 | LLM 默认 | OpenAI 兼容 Chat Completions |
