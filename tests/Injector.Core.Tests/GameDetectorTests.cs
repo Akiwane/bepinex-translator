@@ -11,14 +11,16 @@ public sealed class GameDetectorTests
     public void Detect_MonoFixture_IdentifiesMono()
     {
         using var fx = GameFixtures.CreateMonoGame("SampleMono");
-        var detector = new GameDetector();
+        IGameProbe detector = new GameDetector();
 
         var result = detector.Detect(fx.GameRoot);
 
         Assert.True(result.IsValidUnityGame);
+        Assert.Null(result.Error);
         Assert.Equal(UnityRuntimeKind.Mono, result.Runtime);
         Assert.Equal("2021.3.35f1", result.UnityVersion);
         Assert.NotNull(result.DataDirectory);
+        Assert.Contains(result.EvidencePaths, p => p.Contains("Managed", StringComparison.OrdinalIgnoreCase));
         Assert.Contains(result.Notes, n => n.Contains("Mono", StringComparison.OrdinalIgnoreCase));
     }
 
@@ -59,6 +61,8 @@ public sealed class GameDetectorTests
             var result = new GameDetector().Detect(root);
             Assert.False(result.IsValidUnityGame);
             Assert.Equal(UnityRuntimeKind.Unknown, result.Runtime);
+            Assert.NotNull(result.Error);
+            Assert.Equal(InjectorErrorKind.NotUnityGame, result.Error!.Kind);
         }
         finally
         {

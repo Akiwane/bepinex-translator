@@ -3,20 +3,34 @@ namespace BepInExTranslator.Injector.Core;
 /// <summary>
 /// 按运行时解析 BepInEx 与翻译模组包来源（本地优先，其次配置 URL，再次默认 pin）。
 /// </summary>
-public sealed class PackageResolver
+public sealed class PackageResolver : IPackageResolver
 {
-    public IReadOnlyList<ResolvedPackage> Resolve(UnityRuntimeKind runtime, PackageSourceOptions options)
+    public PackageResolveResult Resolve(UnityRuntimeKind runtime, PackageSourceOptions options)
     {
         if (runtime is not (UnityRuntimeKind.Mono or UnityRuntimeKind.Il2Cpp))
         {
-            throw new InvalidOperationException("无法为未知运行时解析安装包。");
+            return PackageResolveResult.Fail(
+                InjectorError.UnknownRuntime("无法为未知运行时解析安装包。"));
         }
 
-        return new[]
+        try
         {
-            ResolveBepInEx(runtime, options),
-            ResolveTranslator(runtime, options),
-        };
+            return PackageResolveResult.Ok(new[]
+            {
+                ResolveBepInEx(runtime, options),
+                ResolveTranslator(runtime, options),
+            });
+        }
+        catch (FileNotFoundException ex)
+        {
+            return PackageResolveResult.Fail(
+                InjectorError.PackageNotFound(ex.Message, ex.FileName));
+        }
+        catch (InvalidOperationException ex)
+        {
+            return PackageResolveResult.Fail(
+                InjectorError.PackageNotFound(ex.Message));
+        }
     }
 
     public ResolvedPackage ResolveBepInEx(UnityRuntimeKind runtime, PackageSourceOptions options)
@@ -41,7 +55,6 @@ public sealed class PackageResolver
             };
         }
 
-        // —— URL：用户覆盖或目录 pin ——
         string url;
         string version;
         if (runtime == UnityRuntimeKind.Mono)
@@ -72,7 +85,6 @@ public sealed class PackageResolver
 
     public ResolvedPackage ResolveTranslator(UnityRuntimeKind runtime, PackageSourceOptions options)
     {
-        // —— 1) 本地 zip ——
         if (!string.IsNullOrWhiteSpace(options.TranslatorLocalZipPath))
         {
             var zip = Path.GetFullPath(options.TranslatorLocalZipPath);
@@ -92,7 +104,6 @@ public sealed class PackageResolver
             };
         }
 
-        // —— 2) 本地 artifacts 目录 ——
         var artifactsDir = ResolveArtifactsDirectory(runtime, options);
         if (artifactsDir != null && Directory.Exists(artifactsDir) && HasTranslatorDlls(artifactsDir))
         {
@@ -107,7 +118,6 @@ public sealed class PackageResolver
             };
         }
 
-        // —— 3) 显式远程 URL ——
         if (!string.IsNullOrWhiteSpace(options.TranslatorDownloadUrl))
         {
             return new ResolvedPackage
@@ -121,7 +131,6 @@ public sealed class PackageResolver
             };
         }
 
-        // —— 4) 按约定拼 GitHub Release URL（若 tag 已配置）——
         if (!string.IsNullOrWhiteSpace(options.TranslatorReleaseTag))
         {
             var runtimeKey = runtime == UnityRuntimeKind.Mono ? "mono" : "il2cpp";
@@ -143,7 +152,7 @@ public sealed class PackageResolver
 
         throw new InvalidOperationException(
             "未找到翻译模组包：请先构建 artifacts/mono 或 artifacts/il2cpp，" +
-            "或在 UI 中指定本地 zip / 下载 URL / Release tag。详见 docs/injector.md。");
+            "或指定本地 zip / 下载 URL / Release tag。详见 docs/injector.md。");
     }
 
     internal static string? ResolveArtifactsDirectory(UnityRuntimeKind runtime, PackageSourceOptions options)

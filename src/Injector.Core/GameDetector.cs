@@ -6,7 +6,7 @@ namespace BepInExTranslator.Injector.Core;
 /// 识别游戏根目录、Mono vs IL2CPP，并尽力读取 Unity 版本。
 /// 规则与 README 一致：*_Data/Managed 且无 il2cpp_data → Mono；il2cpp_data / GameAssembly.dll → IL2CPP。
 /// </summary>
-public sealed class GameDetector
+public sealed class GameDetector : IGameProbe
 {
     private static readonly Regex UnityVersionRegex = new(
         @"\b(20\d{2}\.\d+\.\d+[a-z]\d+)\b",
@@ -26,11 +26,12 @@ public sealed class GameDetector
     {
         if (string.IsNullOrWhiteSpace(path))
         {
-            return Invalid(path ?? string.Empty, null, "路径为空。");
+            return Invalid(path ?? string.Empty, null, InjectorError.InvalidPath("路径为空。"));
         }
 
         var full = Path.GetFullPath(path.Trim());
         var notes = new List<string>();
+        var evidence = new List<string>();
         string gameRoot;
         string? exePath = null;
 
@@ -40,6 +41,7 @@ public sealed class GameDetector
             exePath = full;
             gameRoot = Path.GetDirectoryName(full) ?? full;
             notes.Add($"已选择游戏 exe：{Path.GetFileName(full)}");
+            evidence.Add(exePath);
         }
         else if (Directory.Exists(full))
         {
@@ -48,11 +50,12 @@ public sealed class GameDetector
             if (exePath != null)
             {
                 notes.Add($"在目录中找到候选 exe：{Path.GetFileName(exePath)}");
+                evidence.Add(exePath);
             }
         }
         else
         {
-            return Invalid(full, null, "路径不存在（既不是目录也不是 .exe）。");
+            return Invalid(full, null, InjectorError.InvalidPath("路径不存在（既不是目录也不是 .exe）。", full));
         }
 
         // —— 定位 *_Data ——
@@ -67,6 +70,10 @@ public sealed class GameDetector
                 UnityVersion = null,
                 DataDirectory = null,
                 IsValidUnityGame = false,
+                EvidencePaths = evidence,
+                Error = InjectorError.NotUnityGame(
+                    "未找到 Unity *_Data 目录；拒绝安装以免写错路径。",
+                    gameRoot),
                 Notes = notes.Concat(new[]
                 {
                     "未找到 Unity *_Data 目录；拒绝安装以免写错路径。",
@@ -76,6 +83,7 @@ public sealed class GameDetector
         }
 
         notes.Add($"数据目录：{Path.GetFileName(dataDir)}");
+        evidence.Add(dataDir);
 
         // —— Mono vs IL2CPP ——
         var il2cppData = Path.Combine(dataDir, "il2cpp_data");
@@ -86,28 +94,35 @@ public sealed class GameDetector
         var hasManaged = Directory.Exists(managed);
 
         UnityRuntimeKind runtime;
+        InjectorError? error = null;
         if (hasIl2CppData || hasGameAssembly)
         {
             runtime = UnityRuntimeKind.Il2Cpp;
             if (hasIl2CppData)
             {
                 notes.Add("检测到 il2cpp_data → IL2CPP。");
+                evidence.Add(il2cppData);
             }
 
             if (hasGameAssembly)
             {
                 notes.Add("检测到 GameAssembly.dll → IL2CPP。");
+                evidence.Add(gameAssembly);
             }
         }
         else if (hasManaged)
         {
             runtime = UnityRuntimeKind.Mono;
             notes.Add("检测到 *_Data/Managed 且无 il2cpp_data → Mono。");
+            evidence.Add(managed);
         }
         else
         {
             runtime = UnityRuntimeKind.Unknown;
             notes.Add("存在 *_Data，但既无 Managed 也无 il2cpp_data / GameAssembly.dll，无法判定运行时。");
+            error = InjectorError.UnknownRuntime(
+                "无法判定 Mono 或 IL2CPP。",
+                dataDir);
         }
 
         // —— Unity 版本（展示/日志；BepInEx 选型以 Mono/IL2CPP 为主）——
@@ -129,11 +144,13 @@ public sealed class GameDetector
             UnityVersion = unityVersion,
             DataDirectory = dataDir,
             IsValidUnityGame = runtime != UnityRuntimeKind.Unknown,
+            EvidencePaths = evidence,
+            Error = error,
             Notes = notes,
         };
     }
 
-    private static GameDetectionResult Invalid(string gameRoot, string? exe, string note)
+    private static GameDetectionResult Invalid(string gameRoot, string? exe, InjectorError error)
     {
         return new GameDetectionResult
         {
@@ -141,13 +158,13 @@ public sealed class GameDetector
             ExePath = exe,
             Runtime = UnityRuntimeKind.Unknown,
             IsValidUnityGame = false,
-            Notes = new[] { note },
+            Error = error,
+            Notes = new[] { error.Message },
         };
     }
 
     internal static string? FindDataDirectory(string gameRoot, string? exePath)
     {
-        // 优先：与 exe 同名的 Foo_Data
         if (exePath != null)
         {
             var stem = Path.GetFileNameWithoutExtension(exePath);
@@ -166,7 +183,6 @@ public sealed class GameDetector
 
         if (dirs.Length > 1)
         {
-            // 多 *_Data 时优先含 Managed 或 il2cpp_data 的
             foreach (var d in dirs)
             {
                 if (Directory.Exists(Path.Combine(d, "Managed"))
@@ -188,14 +204,12 @@ public sealed class GameDetector
             .Where(p =>
             {
                 var name = Path.GetFileName(p);
-                // 排除常见注入器 / 卸载器噪音
                 return !name.StartsWith("UnityCrashHandler", StringComparison.OrdinalIgnoreCase)
                        && !name.Equals("UnityPlayer.dll", StringComparison.OrdinalIgnoreCase)
                        && !name.Contains("unins", StringComparison.OrdinalIgnoreCase);
             })
             .ToList();
 
-        // 优先：旁有同名 *_Data 的 exe
         foreach (var exe in exes)
         {
             var stem = Path.GetFileNameWithoutExtension(exe);
@@ -208,7 +222,6 @@ public sealed class GameDetector
         return exes.FirstOrDefault();
     }
 
-    /// <summary>供测试访问的版本正则。</summary>
     internal static bool LooksLikeUnityVersion(string text) => UnityVersionRegex.IsMatch(text);
 
     internal static string? ExtractUnityVersion(string text)

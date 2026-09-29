@@ -1,4 +1,5 @@
 using System.IO.Compression;
+using System.Net.Http;
 
 namespace BepInExTranslator.Injector.Core;
 
@@ -10,7 +11,7 @@ public sealed class InstallOptions
 
     public OverwritePolicy OverwritePolicy { get; init; } = OverwritePolicy.BackupThenOverwrite;
 
-    /// <summary>下载缓存目录；默认游戏根下 `.bepinex-translator-cache`（gitignore 友好，勿提交）。</summary>
+    /// <summary>下载缓存目录；默认游戏根下 `.bepinex-translator-cache`（勿提交）。</summary>
     public string? CacheDirectory { get; init; }
 
     /// <summary>仓库内 config/Translator.cfg.example 的绝对路径；空则按 RepositoryRoot 推断。</summary>
@@ -20,6 +21,8 @@ public sealed class InstallOptions
 public sealed class InstallResult
 {
     public required bool Success { get; init; }
+
+    public InjectorError? Error { get; init; }
 
     public IReadOnlyList<string> Messages { get; init; } = Array.Empty<string>();
 
@@ -31,12 +34,12 @@ public sealed class InstallResult
 /// <summary>
 /// 安装编排：检测结果 → 解析包 → 下载/物化 → 解压 BepInEx → 放入 plugins + 配置示例。
 /// </summary>
-public sealed class GameInstaller
+public sealed class GameInstaller : IInstaller
 {
-    private readonly PackageResolver _resolver;
+    private readonly IPackageResolver _resolver;
     private readonly PackageDownloader _downloader;
 
-    public GameInstaller(PackageResolver? resolver = null, PackageDownloader? downloader = null)
+    public GameInstaller(IPackageResolver? resolver = null, PackageDownloader? downloader = null)
     {
         _resolver = resolver ?? new PackageResolver();
         _downloader = downloader ?? new PackageDownloader();
@@ -44,15 +47,21 @@ public sealed class GameInstaller
 
     public async Task<InstallResult> InstallAsync(
         InstallOptions options,
-        IProgress<string>? log = null,
+        IProgress<InstallProgress>? progress = null,
         CancellationToken cancellationToken = default)
     {
         var messages = new List<string>();
         var copied = new List<string>();
-        void Report(string m)
+
+        void Report(string message, InstallPhase phase = InstallPhase.General, int? percent = null)
         {
-            messages.Add(m);
-            log?.Report(m);
+            messages.Add(message);
+            progress?.Report(new InstallProgress
+            {
+                Message = message,
+                Phase = phase,
+                Percent = percent,
+            });
         }
 
         var detection = options.Detection;
@@ -60,42 +69,56 @@ public sealed class GameInstaller
         // —— 安全校验 ——
         if (!detection.IsValidUnityGame || detection.Runtime == UnityRuntimeKind.Unknown)
         {
-            return Fail(messages, "探测失败：路径不像有效的 Unity Mono/IL2CPP 游戏，已拒绝安装。");
+            var err = detection.Error
+                      ?? InjectorError.NotUnityGame("探测失败：路径不像有效的 Unity Mono/IL2CPP 游戏，已拒绝安装。");
+            Report(err.Message, InstallPhase.Detect);
+            return Fail(messages, err, copied);
         }
 
         var gameRoot = detection.GameRoot;
         if (!Directory.Exists(gameRoot))
         {
-            return Fail(messages, "游戏根目录不存在。");
+            var err = InjectorError.InvalidPath("游戏根目录不存在。", gameRoot);
+            Report(err.Message, InstallPhase.Detect);
+            return Fail(messages, err, copied);
         }
 
-        Report($"目标：{gameRoot}");
-        Report($"运行时：{detection.RuntimeDisplayName}");
+        Report($"目标：{gameRoot}", InstallPhase.Detect, 5);
+        Report($"运行时：{detection.RuntimeDisplayName}", InstallPhase.Detect, 8);
         if (detection.UnityVersion != null)
         {
-            Report($"Unity：{detection.UnityVersion}");
+            Report($"Unity：{detection.UnityVersion}", InstallPhase.Detect, 10);
         }
 
         // —— 解析包 ——
-        IReadOnlyList<ResolvedPackage> packages;
-        try
+        Report("正在解析安装包…", InstallPhase.ResolvePackages, 15);
+        var resolve = _resolver.Resolve(detection.Runtime, options.PackageSources);
+        if (!resolve.Success || resolve.Error != null)
         {
-            packages = _resolver.Resolve(detection.Runtime, options.PackageSources);
-        }
-        catch (Exception ex)
-        {
-            return Fail(messages, "解析安装包失败：" + ex.Message);
+            var err = resolve.Error ?? InjectorError.PackageNotFound("解析安装包失败。");
+            Report(err.Message, InstallPhase.ResolvePackages);
+            return Fail(messages, err, copied);
         }
 
-        foreach (var p in packages)
+        foreach (var p in resolve.Packages)
         {
-            Report($"包：{p.DisplayName}");
+            Report($"包：{p.DisplayName}", InstallPhase.ResolvePackages, 18);
         }
 
         var cache = options.CacheDirectory
                     ?? Path.Combine(gameRoot, ".bepinex-translator-cache");
-        Directory.CreateDirectory(cache);
-        Report($"缓存目录：{cache}");
+        try
+        {
+            Directory.CreateDirectory(cache);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            var err = InjectorError.PermissionDenied("无法创建缓存目录。", ex.Message);
+            Report(err.Message, InstallPhase.Download);
+            return Fail(messages, err, copied);
+        }
+
+        Report($"缓存目录：{cache}", InstallPhase.Download, 20);
 
         string? backupDir = null;
         if (options.OverwritePolicy == OverwritePolicy.BackupThenOverwrite)
@@ -108,43 +131,97 @@ public sealed class GameInstaller
 
         try
         {
-            // —— BepInEx ——
-            var bepinexPkg = packages.First(p => p.Kind == PackageKind.BepInEx);
-            var bepinexMaterialized = await _downloader
-                .MaterializeAsync(bepinexPkg, cache, log, cancellationToken)
-                .ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
 
-            Report("正在解压 BepInEx 到游戏根目录…");
-            ExtractZipToGameRoot(
-                bepinexMaterialized,
-                gameRoot,
-                options.OverwritePolicy,
-                backupDir,
-                copied,
-                Report);
+            // —— BepInEx ——
+            var bepinexPkg = resolve.Packages.First(p => p.Kind == PackageKind.BepInEx);
+            Report("正在获取 BepInEx 包…", InstallPhase.Download, 30);
+            string bepinexMaterialized;
+            try
+            {
+                bepinexMaterialized = await _downloader
+                    .MaterializeAsync(
+                        bepinexPkg,
+                        cache,
+                        new Progress<string>(m => Report(m, InstallPhase.Download)),
+                        cancellationToken)
+                    .ConfigureAwait(false);
+            }
+            catch (HttpRequestException ex)
+            {
+                var err = InjectorError.DownloadFailed("下载 BepInEx 失败。", ex.Message);
+                Report(err.Message, InstallPhase.Download);
+                return Fail(messages, err, copied, backupDir);
+            }
+            catch (OperationCanceledException)
+            {
+                var err = InjectorError.Cancelled();
+                Report(err.Message);
+                return Fail(messages, err, copied, backupDir);
+            }
+
+            Report("正在解压 BepInEx 到游戏根目录…", InstallPhase.Extract, 50);
+            try
+            {
+                ExtractZipToGameRoot(
+                    bepinexMaterialized,
+                    gameRoot,
+                    options.OverwritePolicy,
+                    backupDir,
+                    copied,
+                    m => Report(m, InstallPhase.Extract));
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                var err = InjectorError.PermissionDenied("解压 BepInEx 时权限不足。", ex.Message);
+                Report(err.Message, InstallPhase.Extract);
+                return Fail(messages, err, copied, backupDir);
+            }
+            catch (IOException ex)
+            {
+                var err = InjectorError.ExtractFailed("解压 BepInEx 失败。", ex.Message);
+                Report(err.Message, InstallPhase.Extract);
+                return Fail(messages, err, copied, backupDir);
+            }
 
             var missing = BepInExLayoutPlanner.MissingExpectedEntries(gameRoot, detection.Runtime);
             if (missing.Count > 0)
             {
                 Report("警告：解压后缺少部分期望条目：" + string.Join(", ", missing)
-                       + "（不同 BepInEx 包可能用 version.dll 代替 winhttp.dll，请人工确认）。");
+                       + "（不同 BepInEx 包可能用 version.dll 代替 winhttp.dll，请人工确认）。",
+                    InstallPhase.Extract, 60);
             }
             else
             {
-                Report("BepInEx 关键布局条目已就位。");
+                Report("BepInEx 关键布局条目已就位。", InstallPhase.Extract, 60);
             }
 
             // —— Translator 模组 ——
-            var modPkg = packages.First(p => p.Kind == PackageKind.TranslatorMod);
-            var modMaterialized = await _downloader
-                .MaterializeAsync(modPkg, cache, log, cancellationToken)
-                .ConfigureAwait(false);
+            var modPkg = resolve.Packages.First(p => p.Kind == PackageKind.TranslatorMod);
+            Report("正在获取翻译模组包…", InstallPhase.Download, 70);
+            string modMaterialized;
+            try
+            {
+                modMaterialized = await _downloader
+                    .MaterializeAsync(
+                        modPkg,
+                        cache,
+                        new Progress<string>(m => Report(m, InstallPhase.Download)),
+                        cancellationToken)
+                    .ConfigureAwait(false);
+            }
+            catch (HttpRequestException ex)
+            {
+                var err = InjectorError.DownloadFailed("下载翻译模组失败。", ex.Message);
+                Report(err.Message, InstallPhase.Download);
+                return Fail(messages, err, copied, backupDir);
+            }
 
             var layout = BepInExLayoutPlanner.PlanTranslatorLayout(gameRoot);
             Directory.CreateDirectory(layout.PluginDirectory);
             Directory.CreateDirectory(layout.ConfigDirectory);
 
-            Report($"安装翻译模组 → {layout.RelativePluginDirectory}");
+            Report($"安装翻译模组 → {layout.RelativePluginDirectory}", InstallPhase.WritePlugins, 80);
             if (Directory.Exists(modMaterialized))
             {
                 CopyTranslatorFromDirectory(
@@ -153,7 +230,7 @@ public sealed class GameInstaller
                     options.OverwritePolicy,
                     backupDir,
                     copied,
-                    Report);
+                    m => Report(m, InstallPhase.WritePlugins));
             }
             else
             {
@@ -163,7 +240,7 @@ public sealed class GameInstaller
                     options.OverwritePolicy,
                     backupDir,
                     copied,
-                    Report);
+                    m => Report(m, InstallPhase.WritePlugins));
             }
 
             // —— 配置示例 ——
@@ -176,15 +253,20 @@ public sealed class GameInstaller
                     options.OverwritePolicy,
                     backupDir,
                     copied,
-                    Report);
-                Report($"已复制配置示例 → {layout.RelativeConfigDirectory}/{BepInExLayoutPlanner.ConfigExampleFileName}");
+                    m => Report(m, InstallPhase.WriteConfig));
+                Report(
+                    $"已复制配置示例 → {layout.RelativeConfigDirectory}/{BepInExLayoutPlanner.ConfigExampleFileName}",
+                    InstallPhase.WriteConfig,
+                    90);
             }
             else
             {
-                Report("未找到 config/Translator.cfg.example；跳过配置示例复制。可稍后手动放置。");
+                Report("未找到 config/Translator.cfg.example；跳过配置示例复制。可稍后手动放置。",
+                    InstallPhase.WriteConfig, 90);
             }
 
-            Report("安装完成。请启动游戏一次，检查 BepInEx/LogOutput.log 是否生成，并确认插件已加载。");
+            Report("安装完成。请启动游戏一次，检查 BepInEx/LogOutput.log 是否生成，并确认插件已加载。",
+                InstallPhase.Done, 100);
             return new InstallResult
             {
                 Success = true,
@@ -193,23 +275,39 @@ public sealed class GameInstaller
                 BackupDirectory = backupDir,
             };
         }
+        catch (OperationCanceledException)
+        {
+            var err = InjectorError.Cancelled();
+            Report(err.Message);
+            return Fail(messages, err, copied, backupDir);
+        }
         catch (Exception ex)
         {
-            Report("安装失败：" + ex.Message);
-            return new InstallResult
-            {
-                Success = false,
-                Messages = messages,
-                CopiedFiles = copied,
-                BackupDirectory = backupDir,
-            };
+            var err = InjectorError.Unexpected("安装失败：" + ex.Message, ex.ToString());
+            Report(err.Message);
+            return Fail(messages, err, copied, backupDir);
         }
     }
 
-    private static InstallResult Fail(List<string> messages, string msg)
+    private static InstallResult Fail(
+        List<string> messages,
+        InjectorError error,
+        List<string>? copied = null,
+        string? backupDir = null)
     {
-        messages.Add(msg);
-        return new InstallResult { Success = false, Messages = messages };
+        if (messages.Count == 0 || messages[^1] != error.Message)
+        {
+            messages.Add(error.Message);
+        }
+
+        return new InstallResult
+        {
+            Success = false,
+            Error = error,
+            Messages = messages,
+            CopiedFiles = copied ?? new List<string>(),
+            BackupDirectory = backupDir,
+        };
     }
 
     internal static string? ResolveConfigExampleSource(InstallOptions options)
@@ -228,9 +326,6 @@ public sealed class GameInstaller
         return Path.Combine(root, "config", "Translator.cfg.example");
     }
 
-    /// <summary>
-    /// 将 BepInEx zip 解压到游戏根；条目路径经 <see cref="BepInExLayoutPlanner.NormalizeZipEntry"/> 规范化。
-    /// </summary>
     internal static void ExtractZipToGameRoot(
         string zipPath,
         string gameRoot,
@@ -277,7 +372,6 @@ public sealed class GameInstaller
                 continue;
             }
 
-            // zip 内可能已带 BepInEx/plugins/Translator/ 前缀，剥到文件名层
             var name = entry.FullName.Replace('\\', '/');
             var marker = "BepInEx/plugins/Translator/";
             string relative;
@@ -310,7 +404,6 @@ public sealed class GameInstaller
         List<string> copied,
         Action<string> report)
     {
-        // 仅复制插件 DLL（及同目录附属文件），避免把整个 artifacts 噪音带入
         var required = new[] { "BepInExTranslator.dll", "BepInExTranslator.Core.dll" };
         foreach (var file in required)
         {
@@ -324,7 +417,6 @@ public sealed class GameInstaller
             CopyFileWithPolicy(src, dest, policy, backupDir, copied, report);
         }
 
-        // 可选：同目录下其它 dll / json
         foreach (var src in Directory.GetFiles(sourceDir))
         {
             var name = Path.GetFileName(src);

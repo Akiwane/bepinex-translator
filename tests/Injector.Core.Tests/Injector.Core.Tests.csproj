@@ -19,7 +19,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\BepInExTranslator.Injector.Core\BepInExTranslator.Injector.Core.csproj" />
+    <ProjectReference Include="..\..\src\Injector.Core\Injector.Core.csproj" />
   </ItemGroup>
 
   <ItemGroup>

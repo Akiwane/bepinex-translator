@@ -32,13 +32,13 @@ v1.0 **无**游戏内/桌面配置 UI，仅使用 BepInEx ConfigFile + JSON 翻�
 
 ## 安装到游戏
 
-### 推荐：Windows 注入器 GUI（v1.1 / REQUIREMENTS §7）
+### 推荐：Windows 注入器（v1.1 / REQUIREMENTS §7）
 
-独立桌面程序可自动识别 Mono/IL2CPP、下载匹配的 BepInEx，并将本模组放入 `BepInEx/plugins`。用法、默认包 pin、验收步骤见 **[`docs/injector.md`](./docs/injector.md)**。
+`Injector.Core` 可自动识别 Mono/IL2CPP、下载匹配的 BepInEx，并将本模组放入 `BepInEx/plugins`。`Injector.Gui` 目前为 **Avalonia stub**（完整 UI 由前端负责）。契约、默认包 pin、验收步骤见 **[`docs/injector.md`](./docs/injector.md)**。
 
 ```bash
-dotnet build src/BepInExTranslator.Injector.Gui/BepInExTranslator.Injector.Gui.csproj -c Release
-dotnet run --project src/BepInExTranslator.Injector.Gui -c Release
+dotnet build src/Injector.Core/Injector.Core.csproj -c Release
+dotnet build src/Injector.Gui/Injector.Gui.csproj -c Release
 ```
 
 ### 1. 确认游戏后端（手动安装时）
@@ -159,7 +159,7 @@ FontPath = Microsoft YaHei
 dotnet test BepInExTranslator.sln
 dotnet build src/BepInExTranslator.Plugin/BepInExTranslator.Plugin.csproj -c Release
 dotnet build src/BepInExTranslator.Plugin.Il2Cpp/BepInExTranslator.Plugin.Il2Cpp.csproj -c Release
-dotnet build src/BepInExTranslator.Injector.Gui/BepInExTranslator.Injector.Gui.csproj -c Release
+dotnet build src/Injector.Gui/BepInExTranslator.Injector.Gui.csproj -c Release
 ```
 
 注入器说明：[`docs/injector.md`](./docs/injector.md)。

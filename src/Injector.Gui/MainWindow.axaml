@@ -1,0 +1,21 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="BepInExTranslator.Injector.Gui.MainWindow"
+        Title="BepInEx Translator 注入器（GUI stub）"
+        Width="520"
+        Height="280"
+        WindowStartupLocation="CenterScreen">
+  <StackPanel Margin="24" Spacing="12">
+    <TextBlock Text="注入器 GUI Stub"
+               FontSize="20"
+               FontWeight="SemiBold" />
+    <TextBlock TextWrapping="Wrap"
+               Text="完整 Avalonia UI 由前端负责。本窗口仅用于验证工程可编译，并引用 Injector.Core 契约（IGameProbe / IPackageResolver / IInstaller）。" />
+    <TextBlock Name="CoreSummaryText" TextWrapping="Wrap" Opacity="0.85" />
+    <Button Name="SmokeDetectButton"
+            Content="对空路径做一次探测冒烟（验证 Core 引用）"
+            HorizontalAlignment="Left"
+            Click="OnSmokeDetectClick" />
+    <TextBlock Name="SmokeResultText" TextWrapping="Wrap" />
+  </StackPanel>
+</Window>

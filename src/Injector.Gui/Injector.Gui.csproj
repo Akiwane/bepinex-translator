@@ -6,11 +6,13 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <LangVersion>latest</LangVersion>
     <RootNamespace>BepInExTranslator.Injector.Gui</RootNamespace>
-    <AssemblyName>BepInExTranslator.Injector.Gui</AssemblyName>
+    <AssemblyName>Injector.Gui</AssemblyName>
     <ApplicationManifest>app.manifest</ApplicationManifest>
-    <ApplicationTitle>BepInEx Translator Injector</ApplicationTitle>
-    <!-- Windows 桌面产物；仍可在 Linux CI 上 restore/build（无头）。 -->
-    <Description>Windows standalone GUI injector for BepInEx + Translator (REQUIREMENTS §7).</Description>
+    <ApplicationTitle>BepInEx Translator Injector (stub)</ApplicationTitle>
+    <Description>
+      Minimal Avalonia stub for Windows injector. Frontend owns the polished GUI;
+      this project only compiles against Injector.Core and shows a placeholder window.
+    </Description>
   </PropertyGroup>
 
   <ItemGroup>
@@ -21,6 +23,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\BepInExTranslator.Injector.Core\BepInExTranslator.Injector.Core.csproj" />
+    <ProjectReference Include="..\Injector.Core\Injector.Core.csproj" />
   </ItemGroup>
 </Project>

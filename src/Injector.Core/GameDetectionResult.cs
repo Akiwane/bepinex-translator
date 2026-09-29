@@ -1,7 +1,7 @@
 namespace BepInExTranslator.Injector.Core;
 
 /// <summary>
-/// 对游戏目录 / exe 的探测结果。
+/// 对游戏目录 / exe 的探测结果（含证据路径，供 GUI 展示）。
 /// </summary>
 public sealed class GameDetectionResult
 {
@@ -19,7 +19,13 @@ public sealed class GameDetectionResult
     /// <summary>是否具备 Unity 游戏根目录的最低特征（*_Data 等）。</summary>
     public bool IsValidUnityGame { get; init; }
 
+    /// <summary>探测所依据的路径证据（Managed / il2cpp_data / GameAssembly.dll 等）。</summary>
+    public IReadOnlyList<string> EvidencePaths { get; init; } = Array.Empty<string>();
+
     public IReadOnlyList<string> Notes { get; init; } = Array.Empty<string>();
+
+    /// <summary>类型化错误；成功探测时为 null。</summary>
+    public InjectorError? Error { get; init; }
 
     public string RuntimeDisplayName => Runtime switch
     {

@@ -18,11 +18,11 @@ src/
   BepInExTranslator.Core/           # 纯逻辑（netstandard2.0）
   BepInExTranslator.Plugin/         # BepInEx 5 Mono 插件（net472）
   BepInExTranslator.Plugin.Il2Cpp/  # BepInEx 6 IL2CPP 插件（net6.0）
-  BepInExTranslator.Injector.Core/  # 注入器核心（探测/下载/布局）
-  BepInExTranslator.Injector.Gui/   # Avalonia Windows GUI
+  Injector.Core/                    # 注入器核心（探测/下载/布局）
+  Injector.Gui/                     # Avalonia GUI stub（完整 UI 归前端）
 tests/
   BepInExTranslator.Core.Tests/     # 无 Unity 的单元测试
-  BepInExTranslator.Injector.Core.Tests/
+  Injector.Core.Tests/
 artifacts/mono|il2cpp/              # 构建输出（gitignore）
 ```
 
@@ -34,16 +34,18 @@ dotnet test BepInExTranslator.sln -c Release
 
 覆盖：`TextHasher`、`TemplateFiller`（含 `{source}`/`{targetLanguage}`/`{hash}`）、`TranslationCache`、`FontSizeAdjuster`、`JsonPathExtractor`（含 `choices.0.message.content`）、按需翻译跳过 API；以及注入器探测桩（Mono/IL2CPP）、布局规划与本地 zip 落盘。
 
-## Windows 注入器 GUI
+## Windows 注入器
 
-详见 [`docs/injector.md`](docs/injector.md)。
+详见 [`docs/injector.md`](docs/injector.md)。**Core** 为可测安装逻辑；**Gui** 为 Avalonia stub（完整 UI 归前端）。
 
 ```bash
-dotnet build src/BepInExTranslator.Injector.Gui/BepInExTranslator.Injector.Gui.csproj -c Release
-dotnet run --project src/BepInExTranslator.Injector.Gui -c Release
+dotnet build src/Injector.Core/BepInExTranslator.Injector.Core.csproj -c Release
+dotnet build src/Injector.Gui/BepInExTranslator.Injector.Gui.csproj -c Release
 ```
 
 默认 BepInEx pin：Mono → `5.4.23.5` win-x64；IL2CPP → `6.0.0-pre.2` Unity.IL2CPP win-x64。模组默认取自 `artifacts/mono|il2cpp`。
+
+公共契约：`IGameProbe` / `IPackageResolver` / `IInstaller` + `InjectorError` / `InstallProgress`。
 
 ## 构建 Mono 插件（BepInEx 5）
 

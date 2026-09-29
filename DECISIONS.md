@@ -22,3 +22,4 @@
 | 2026-09-29 | PR #4 合入 main；启动注入器 v1.1 交接 | 用户批准合并 |
 | 2026-09-29 | 注入器：Avalonia + Injector.Core 分离；BepInEx 5.4.23.5 (Mono) / 6.0.0-pre.2 IL2CPP win-x64 pin | 实现 v1.1 §7 |
 | 2026-09-29 | 模组包默认优先本地 artifacts/mono\|il2cpp，其次可配 zip/URL/Release tag | 实现 v1.1 §7 |
+| 2026-09-29 | Core 契约：IGameProbe / IPackageResolver / IInstaller + InjectorError；Gui 仅 stub，完整 UI 归前端 | 与前端分工 |

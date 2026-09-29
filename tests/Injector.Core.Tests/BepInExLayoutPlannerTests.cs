@@ -75,26 +75,36 @@ public sealed class BepInExLayoutPlannerTests
 public sealed class PackageResolverTests
 {
     [Fact]
-    public void ResolveBepInEx_Mono_UsesPinnedUrl()
+    public void Resolve_Mono_UsesPinnedBepInExUrl()
     {
-        var resolver = new PackageResolver();
-        var pkg = resolver.ResolveBepInEx(UnityRuntimeKind.Mono, new PackageSourceOptions());
-        Assert.Equal(PackageSourceKind.RemoteUrl, pkg.SourceKind);
-        Assert.Equal(PackageCatalog.BepInEx5Version, pkg.VersionLabel);
-        Assert.Equal(PackageCatalog.BepInEx5DownloadUrl, pkg.DownloadUrl);
+        IPackageResolver resolver = new PackageResolver();
+        var result = resolver.Resolve(UnityRuntimeKind.Mono, new PackageSourceOptions
+        {
+            TranslatorDownloadUrl = "https://example.com/mod.zip",
+        });
+        Assert.True(result.Success);
+        var bepinex = Assert.Single(result.Packages, p => p.Kind == PackageKind.BepInEx);
+        Assert.Equal(PackageSourceKind.RemoteUrl, bepinex.SourceKind);
+        Assert.Equal(PackageCatalog.BepInEx5Version, bepinex.VersionLabel);
+        Assert.Equal(PackageCatalog.BepInEx5DownloadUrl, bepinex.DownloadUrl);
     }
 
     [Fact]
-    public void ResolveBepInEx_Il2Cpp_UsesPinnedUrl()
+    public void Resolve_Il2Cpp_UsesPinnedBepInExUrl()
     {
-        var resolver = new PackageResolver();
-        var pkg = resolver.ResolveBepInEx(UnityRuntimeKind.Il2Cpp, new PackageSourceOptions());
-        Assert.Equal(PackageCatalog.BepInEx6Version, pkg.VersionLabel);
-        Assert.Contains("Unity.IL2CPP-win-x64", pkg.DownloadUrl);
+        IPackageResolver resolver = new PackageResolver();
+        var result = resolver.Resolve(UnityRuntimeKind.Il2Cpp, new PackageSourceOptions
+        {
+            TranslatorDownloadUrl = "https://example.com/mod.zip",
+        });
+        Assert.True(result.Success);
+        var bepinex = Assert.Single(result.Packages, p => p.Kind == PackageKind.BepInEx);
+        Assert.Equal(PackageCatalog.BepInEx6Version, bepinex.VersionLabel);
+        Assert.Contains("Unity.IL2CPP-win-x64", bepinex.DownloadUrl);
     }
 
     [Fact]
-    public void ResolveTranslator_PrefersLocalArtifacts()
+    public void Resolve_PrefersLocalTranslatorArtifacts()
     {
         var root = Path.Combine(Path.GetTempPath(), "bepinex-artifacts-" + Guid.NewGuid().ToString("N"));
         var mono = Path.Combine(root, "artifacts", "mono");
@@ -103,18 +113,30 @@ public sealed class PackageResolverTests
         File.WriteAllText(Path.Combine(mono, "BepInExTranslator.Core.dll"), "dll");
         try
         {
-            var resolver = new PackageResolver();
-            var pkg = resolver.ResolveTranslator(UnityRuntimeKind.Mono, new PackageSourceOptions
+            IPackageResolver resolver = new PackageResolver();
+            var result = resolver.Resolve(UnityRuntimeKind.Mono, new PackageSourceOptions
             {
                 RepositoryRoot = root,
             });
-            Assert.Equal(PackageSourceKind.LocalDirectory, pkg.SourceKind);
-            Assert.Equal(mono, pkg.LocalPath);
+            Assert.True(result.Success);
+            var mod = Assert.Single(result.Packages, p => p.Kind == PackageKind.TranslatorMod);
+            Assert.Equal(PackageSourceKind.LocalDirectory, mod.SourceKind);
+            Assert.Equal(mono, mod.LocalPath);
         }
         finally
         {
             Directory.Delete(root, true);
         }
+    }
+
+    [Fact]
+    public void Resolve_UnknownRuntime_ReturnsTypedError()
+    {
+        IPackageResolver resolver = new PackageResolver();
+        var result = resolver.Resolve(UnityRuntimeKind.Unknown, new PackageSourceOptions());
+        Assert.False(result.Success);
+        Assert.NotNull(result.Error);
+        Assert.Equal(InjectorErrorKind.UnknownRuntime, result.Error!.Kind);
     }
 }
 

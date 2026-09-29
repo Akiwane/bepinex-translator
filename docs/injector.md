@@ -8,25 +8,43 @@
 
 | 项目 | 说明 |
 |------|------|
-| `src/BepInExTranslator.Injector.Core` | 探测 / 包解析 / 下载 / 落盘（可单测） |
-| `src/BepInExTranslator.Injector.Gui` | Avalonia 桌面 GUI（net8.0） |
-| `tests/BepInExTranslator.Injector.Core.Tests` | Mono/IL2CPP 探测桩 + 布局规划 / 安装落盘单测 |
+| `src/Injector.Core` | **本 PR 主体**：探测 / 包解析 / 下载 / 落盘（可单测） |
+| `src/Injector.Gui` | **最小 Avalonia stub**（可编译、引用 Core）；完整 UI 由前端替换/扩展 |
+| `tests/Injector.Core.Tests` | Mono/IL2CPP 探测桩 + 布局规划 / 安装落盘单测 |
 
-## 构建与运行 GUI
+## Core 公共契约
+
+前端 GUI 应依赖下列入口（实现类：`GameDetector` / `PackageResolver` / `GameInstaller`）：
+
+```csharp
+IGameProbe.Detect(path)
+  → GameDetectionResult（UnityVersion、Runtime、EvidencePaths、可选 InjectorError）
+
+IPackageResolver.Resolve(runtime, PackageSourceOptions)
+  → PackageResolveResult（Packages 或 InjectorError）
+
+IInstaller.InstallAsync(InstallOptions, IProgress<InstallProgress>?, CancellationToken)
+  → InstallResult（Success、CopiedFiles、可选 InjectorError）
+```
+
+错误用 `InjectorError` / `InjectorErrorKind`（InvalidPath、NotUnityGame、DownloadFailed、PermissionDenied 等），不以裸异常作为唯一 API。
+
+## 构建
 
 ```bash
 # 建议先构建对应运行时的插件产物（供本地 artifacts 安装）
 dotnet build src/BepInExTranslator.Plugin/BepInExTranslator.Plugin.csproj -c Release
 dotnet build src/BepInExTranslator.Plugin.Il2Cpp/BepInExTranslator.Plugin.Il2Cpp.csproj -c Release
 
-dotnet build src/BepInExTranslator.Injector.Gui/BepInExTranslator.Injector.Gui.csproj -c Release
-dotnet run --project src/BepInExTranslator.Injector.Gui -c Release
+dotnet build src/Injector.Core/Injector.Core.csproj -c Release
+dotnet build src/Injector.Gui/Injector.Gui.csproj -c Release
+dotnet test tests/Injector.Core.Tests -c Release
 ```
 
-Windows 上也可直接运行：
+GUI stub（占位窗口，非完整安装 UI）：
 
-```text
-src/BepInExTranslator.Injector.Gui/bin/Release/net8.0/BepInExTranslator.Injector.Gui.exe
+```bash
+dotnet run --project src/Injector.Gui -c Release
 ```
 
 ## 探测规则（与 README 一致）
@@ -46,7 +64,7 @@ Unity 版本尽力从 `globalgamemanagers` / `data.unity3d` / `*_Data/unity vers
 - Mono：`Game.exe` + `Game_Data/Managed/` + 版本桩文件  
 - IL2CPP：`Game.exe` + `Game_Data/il2cpp_data/` 和/或根目录 `GameAssembly.dll`
 
-见 `tests/BepInExTranslator.Injector.Core.Tests/GameDetectorTests.cs`。
+见 `tests/Injector.Core.Tests/GameDetectorTests.cs`。
 
 ## 默认包映射（已 pin）
 
@@ -60,18 +78,18 @@ Unity 版本尽力从 `globalgamemanagers` / `data.unity3d` / `*_Data/unity vers
 - `https://github.com/BepInEx/BepInEx/releases/download/v5.4.23.5/BepInEx_win_x64_5.4.23.5.zip`
 - `https://github.com/BepInEx/BepInEx/releases/download/v6.0.0-pre.2/BepInEx-Unity.IL2CPP-win-x64-6.0.0-pre.2.zip`
 
-可在 GUI 中用「BepInEx 本地 zip」或将来扩展 URL 覆盖。常量见 `PackageCatalog.cs`。
+可通过 `PackageSourceOptions.BepInExLocalZipPath` / `BepInExMonoUrl` / `BepInExIl2CppUrl` 覆盖。常量见 `PackageCatalog.cs`。
 
-> 说明：本仓库 IL2CPP 插件 NuGet 引用的是 `BepInEx.Unity.IL2CPP` **6.0.0-be.733**。官方 GitHub 目前有稳定可 pin 的 **6.0.0-pre.2** 发行包。若某款新游戏需要更新的 Bleeding Edge，请在 GUI 中改用本地 BE zip（从 [builds.bepinex.dev](https://builds.bepinex.dev/projects/bepinex_be) 获取 `BepInEx-Unity.IL2CPP-win-x64-…`）。
+> 说明：本仓库 IL2CPP 插件 NuGet 引用的是 `BepInEx.Unity.IL2CPP` **6.0.0-be.733**。官方 GitHub 目前有稳定可 pin 的 **6.0.0-pre.2** 发行包。若某款新游戏需要更新的 Bleeding Edge，请传入本地 BE zip（从 [builds.bepinex.dev](https://builds.bepinex.dev/projects/bepinex_be) 获取 `BepInEx-Unity.IL2CPP-win-x64-…`）。
 
 ## 翻译模组包来源（优先级）
 
-1. GUI「翻译模组本地 zip」  
-2. GUI「artifacts 目录」，或仓库相对默认：`artifacts/mono` / `artifacts/il2cpp`（需先 `dotnet build` 对应插件）  
-3. GUI「下载 URL」  
-4. GUI「GitHub Release tag」→ 约定资产名 `BepInExTranslator-{mono|il2cpp}-win.zip`
+1. `PackageSourceOptions.TranslatorLocalZipPath`  
+2. `TranslatorLocalArtifactsDirectory`，或仓库相对默认：`artifacts/mono` / `artifacts/il2cpp`（需先 `dotnet build` 对应插件）  
+3. `TranslatorDownloadUrl`  
+4. `TranslatorReleaseTag` → 约定资产名 `BepInExTranslator-{mono|il2cpp}-win.zip`
 
-**默认推荐**：开发机先构建插件，注入器自动从 `artifacts/` 复制。不要把下载的 zip / DLL 提交进 git。
+**默认推荐**：开发机先构建插件，Core 从 `artifacts/` 复制。不要把下载的 zip / DLL 提交进 git。
 
 ## 安装落盘布局
 
