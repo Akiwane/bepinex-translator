@@ -3,45 +3,18 @@ using Injector.Core.Abstractions;
 namespace Injector.Core.Install;
 
 /// <summary>
-/// Skeleton HTTP downloader for the future real installer.
-/// Not used by <see cref="StubInstaller"/> (which skips network by design for CI).
-/// TODO(backend): wire this into a real <see cref="IInstaller"/> that downloads BepInEx zips,
-/// validates hashes, extracts doorstop/winhttp/BepInEx layout, then copies the plugin package.
+/// Placeholder for the backend real downloader.
+/// StubInstaller never calls this. Do not implement BepInEx GitHub download here —
+/// that belongs in the backend Injector.Core PR.
 /// </summary>
 public sealed class HttpPackageDownloader : IPackageDownloader
 {
-    private readonly HttpClient _httpClient;
-
-    public HttpPackageDownloader(HttpClient? httpClient = null)
+    public Task DownloadAsync(string url, string destinationPath, CancellationToken cancellationToken = default)
     {
-        _httpClient = httpClient ?? new HttpClient();
-    }
-
-    public async Task DownloadAsync(string url, string destinationPath, CancellationToken cancellationToken = default)
-    {
-        // Intentionally minimal: backend should add retries, progress, hash checks, and User-Agent.
-        ArgumentException.ThrowIfNullOrWhiteSpace(url);
-        ArgumentException.ThrowIfNullOrWhiteSpace(destinationPath);
-
-        string? directory = Path.GetDirectoryName(destinationPath);
-        if (!string.IsNullOrEmpty(directory))
-        {
-            Directory.CreateDirectory(directory);
-        }
-
-        using HttpResponseMessage response = await _httpClient
-            .GetAsync(url, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
-            .ConfigureAwait(false);
-        response.EnsureSuccessStatusCode();
-
-        await using Stream remote = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
-        await using FileStream local = new(
-            destinationPath,
-            FileMode.Create,
-            FileAccess.Write,
-            FileShare.None,
-            bufferSize: 81920,
-            useAsync: true);
-        await remote.CopyToAsync(local, cancellationToken).ConfigureAwait(false);
+        // Intentionally unimplemented in the Gui/stub PR to avoid conflicting with backend Core.
+        return Task.FromException(new NotImplementedException(
+            "HttpPackageDownloader is a skeleton. Backend owns real BepInEx/plugin downloads " +
+            "(official GitHub Releases: Mono→5.x Win x64, IL2CPP→6.x Unity IL2CPP Win; " +
+            "plugin prefers artifacts/mono|il2cpp)."));
     }
 }

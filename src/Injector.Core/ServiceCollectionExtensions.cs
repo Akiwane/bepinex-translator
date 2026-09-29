@@ -16,8 +16,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IGameProbe, GameProbe>();
         services.AddSingleton<IPackageResolver, StubPackageResolver>();
         services.AddSingleton<IInstaller, StubInstaller>();
-        // HttpPackageDownloader is registered for future backend wiring; stub does not use it.
-        services.AddSingleton<IPackageDownloader, HttpPackageDownloader>();
+        // Do not register HttpPackageDownloader here — backend wires real download/install.
         return services;
     }
 }

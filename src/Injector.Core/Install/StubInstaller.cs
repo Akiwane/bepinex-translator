@@ -5,9 +5,10 @@ using Injector.Core.Models;
 namespace Injector.Core.Install;
 
 /// <summary>
-/// Stub installer: simulates §7 stages with short delays and progress reports.
-/// Does <b>not</b> download real BepInEx zips (CI-safe). Optionally writes a marker /
-/// mini layout when <c>INJECTOR_STUB_WRITE=1</c> or the target looks like a test fixture.
+/// Stub installer for GUI demo: simulates §7 stages with short delays and progress reports.
+/// Does <b>not</b> download or install real BepInEx (backend owns that).
+/// Optionally writes a demo marker / mini layout when <c>INJECTOR_STUB_WRITE=1</c>
+/// or the target looks like a test fixture — useful for overwrite UX, not a real install.
 /// </summary>
 public sealed class StubInstaller : IInstaller
 {
