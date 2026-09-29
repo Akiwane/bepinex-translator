@@ -8,4 +8,7 @@
     <AssemblyName>Injector.Core</AssemblyName>
     <Description>Windows injector core: Unity Mono/IL2CPP detection, BepInEx package resolve/download, and layout install.</Description>
   </PropertyGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Injector.Core.Tests" />
+  </ItemGroup>
 </Project>

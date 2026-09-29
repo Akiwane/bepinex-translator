@@ -70,8 +70,8 @@ Unity 版本尽力从 `globalgamemanagers` / `data.unity3d` / `*_Data/unity vers
 
 ## 默认包映射（已 pin）
 
-| 运行时 | BepInEx | 资产 |
-|--------|---------|------|
+| 运行时 | BepInEx（注入器默认下载） | 资产 |
+|--------|---------------------------|------|
 | Mono | **5.4.23.5** | `BepInEx_win_x64_5.4.23.5.zip` |
 | IL2CPP | **6.0.0-pre.2** | `BepInEx-Unity.IL2CPP-win-x64-6.0.0-pre.2.zip` |
 
@@ -80,18 +80,51 @@ Unity 版本尽力从 `globalgamemanagers` / `data.unity3d` / `*_Data/unity vers
 - `https://github.com/BepInEx/BepInEx/releases/download/v5.4.23.5/BepInEx_win_x64_5.4.23.5.zip`
 - `https://github.com/BepInEx/BepInEx/releases/download/v6.0.0-pre.2/BepInEx-Unity.IL2CPP-win-x64-6.0.0-pre.2.zip`
 
-可通过 `PackageSourceOptions.BepInExLocalZipPath` / `BepInExMonoUrl` / `BepInExIl2CppUrl` 覆盖。常量见 `PackageCatalog.cs`。
+### IL2CPP：pre.2（注入器）vs BE.733（插件 NuGet）
 
-> 说明：本仓库 IL2CPP 插件 NuGet 引用的是 `BepInEx.Unity.IL2CPP` **6.0.0-be.733**。官方 GitHub 目前有稳定可 pin 的 **6.0.0-pre.2** 发行包。若某款新游戏需要更新的 Bleeding Edge，请传入本地 BE zip（从 [builds.bepinex.dev](https://builds.bepinex.dev/projects/bepinex_be) 获取 `BepInEx-Unity.IL2CPP-win-x64-…`）。
+| 用途 | 版本 | 说明 |
+|------|------|------|
+| 注入器默认 GitHub zip | **6.0.0-pre.2** | 官方 Releases 可稳定 pin；大多数游戏可用 |
+| 插件工程 NuGet | **6.0.0-be.733**（`BepInEx.Unity.IL2CPP`） | 编译插件 API；与运行时 loader 需兼容 |
+
+若某款新游戏需要更新的 Bleeding Edge loader：
+
+1. 从 [builds.bepinex.dev](https://builds.bepinex.dev/projects/bepinex_be) 下载 `BepInEx-Unity.IL2CPP-win-x64-…` zip  
+2. 通过 `PackageSourceOptions.BepInExLocalZipPath` 指向该 zip，**或**  
+3. 通过 `BepInExIl2CppUrl` 指向 HTTPS URL（主机须在允许列表，含 `builds.bepinex.dev`）
+
+Gui 当前未暴露本地 BE 路径输入框；高级用户可在代码/DI 中设置 `PackageSourceOptions`，或开发机用本地 zip 覆盖。常量见 `PackageCatalog.cs`。
+
+可通过 `PackageSourceOptions.BepInExLocalZipPath` / `BepInExMonoUrl` / `BepInExIl2CppUrl` 覆盖。
 
 ## 翻译模组包来源（优先级）
 
 1. `PackageSourceOptions.TranslatorLocalZipPath`  
 2. `TranslatorLocalArtifactsDirectory`，或仓库相对默认：`artifacts/mono` / `artifacts/il2cpp`（需先 `dotnet build` 对应插件）  
-3. `TranslatorDownloadUrl`  
-4. `TranslatorReleaseTag` → 约定资产名 `BepInExTranslator-{mono|il2cpp}-win.zip`
+3. `TranslatorDownloadUrl`（须 HTTPS + 允许主机）  
+4. **默认远程**：`TranslatorReleaseTag`（空则 **`latest`**）→  
+   - tag=`latest` → `https://github.com/Akiwane/bepinex-translator/releases/latest/download/BepInExTranslator-{mono\|il2cpp}-win.zip`  
+   - 其它 tag → `…/releases/download/{tag}/BepInExTranslator-{mono\|il2cpp}-win.zip`
 
-**默认推荐**：开发机先构建插件，Core 从 `artifacts/` 复制。不要把下载的 zip / DLL 提交进 git。
+**开发机推荐**：先构建插件，Core 从 `artifacts/` 复制（优先于远程）。  
+**独立用户**：无本地 artifacts 时自动走上述 GitHub Release。若 Release 资产尚未发布，下载失败信息会提示构建 `artifacts/` 或设置本地 zip。不要把下载的 zip / DLL 提交进 git。
+
+## 下载 URL 信任
+
+`PackageDownloader`（及解析阶段的远程 URL）强制：
+
+- **仅 HTTPS**
+- 主机允许列表：`github.com`、`objects.githubusercontent.com`、`release-assets.githubusercontent.com`、`builds.bepinex.dev`
+
+其它主机返回类型化 `InjectorError`（`DownloadFailed`）。
+
+## 解压安全（zip-slip）
+
+`ExtractZipToGameRoot` / `ExtractTranslatorZip` / `NormalizeZipEntry`：
+
+- 拒绝条目中的 `..`、绝对路径、盘符路径  
+- 解压前 `Path.GetFullPath`，断言落盘路径前缀严格位于目标根（游戏根 / plugins）之下（带尾部分隔符）  
+- 违例返回 `InjectorError`（`InvalidPath`），不写出任何逃逸文件
 
 ## 安装落盘布局
 
@@ -119,5 +152,6 @@ BepInEx/config/Translator.cfg.example
 ## 安全注意
 
 - 路径必须通过 Unity `*_Data` 探测，否则拒绝写入。  
+- zip 解压有 zip-slip 防护；下载仅 HTTPS + 主机允许列表。  
 - 不提交 API 密钥；包 URL 为公开 Releases，无 secrets。  
 - 遵守游戏 EULA / ToS 与 BepInEx 许可。

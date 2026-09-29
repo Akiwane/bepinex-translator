@@ -153,6 +153,13 @@ public sealed class GameInstaller : IInstaller
                 Report(err.Message, InstallPhase.Download);
                 return Fail(messages, err, copied, backupDir);
             }
+            catch (InvalidOperationException ex)
+            {
+                // URL 信任策略拒绝等
+                var err = InjectorError.DownloadFailed(ex.Message);
+                Report(err.Message, InstallPhase.Download);
+                return Fail(messages, err, copied, backupDir);
+            }
             catch (OperationCanceledException)
             {
                 var err = InjectorError.Cancelled();
@@ -163,13 +170,18 @@ public sealed class GameInstaller : IInstaller
             Report("正在解压 BepInEx 到游戏根目录…", InstallPhase.Extract, 50);
             try
             {
-                ExtractZipToGameRoot(
+                var extractErr = ExtractZipToGameRoot(
                     bepinexMaterialized,
                     gameRoot,
                     options.OverwritePolicy,
                     backupDir,
                     copied,
                     m => Report(m, InstallPhase.Extract));
+                if (extractErr != null)
+                {
+                    Report(extractErr.Message, InstallPhase.Extract);
+                    return Fail(messages, extractErr, copied, backupDir);
+                }
             }
             catch (UnauthorizedAccessException ex)
             {
@@ -212,7 +224,16 @@ public sealed class GameInstaller : IInstaller
             }
             catch (HttpRequestException ex)
             {
-                var err = InjectorError.DownloadFailed("下载翻译模组失败。", ex.Message);
+                var err = InjectorError.DownloadFailed(
+                    "下载翻译模组失败。若 GitHub Release 尚未发布对应资产，请先构建 artifacts/mono 或 artifacts/il2cpp，或设置本地 TranslatorLocalZipPath。详见 docs/injector.md。",
+                    ex.Message);
+                Report(err.Message, InstallPhase.Download);
+                return Fail(messages, err, copied, backupDir);
+            }
+            catch (InvalidOperationException ex)
+            {
+                // URL 信任策略拒绝等
+                var err = InjectorError.DownloadFailed(ex.Message);
                 Report(err.Message, InstallPhase.Download);
                 return Fail(messages, err, copied, backupDir);
             }
@@ -222,25 +243,45 @@ public sealed class GameInstaller : IInstaller
             Directory.CreateDirectory(layout.ConfigDirectory);
 
             Report($"安装翻译模组 → {layout.RelativePluginDirectory}", InstallPhase.WritePlugins, 80);
-            if (Directory.Exists(modMaterialized))
+            try
             {
-                CopyTranslatorFromDirectory(
-                    modMaterialized,
-                    layout.PluginDirectory,
-                    options.OverwritePolicy,
-                    backupDir,
-                    copied,
-                    m => Report(m, InstallPhase.WritePlugins));
+                if (Directory.Exists(modMaterialized))
+                {
+                    CopyTranslatorFromDirectory(
+                        modMaterialized,
+                        layout.PluginDirectory,
+                        options.OverwritePolicy,
+                        backupDir,
+                        copied,
+                        m => Report(m, InstallPhase.WritePlugins));
+                }
+                else
+                {
+                    var modExtractErr = ExtractTranslatorZip(
+                        modMaterialized,
+                        layout.PluginDirectory,
+                        options.OverwritePolicy,
+                        backupDir,
+                        copied,
+                        m => Report(m, InstallPhase.WritePlugins));
+                    if (modExtractErr != null)
+                    {
+                        Report(modExtractErr.Message, InstallPhase.WritePlugins);
+                        return Fail(messages, modExtractErr, copied, backupDir);
+                    }
+                }
             }
-            else
+            catch (UnauthorizedAccessException ex)
             {
-                ExtractTranslatorZip(
-                    modMaterialized,
-                    layout.PluginDirectory,
-                    options.OverwritePolicy,
-                    backupDir,
-                    copied,
-                    m => Report(m, InstallPhase.WritePlugins));
+                var err = InjectorError.PermissionDenied("写入翻译模组时权限不足。", ex.Message);
+                Report(err.Message, InstallPhase.WritePlugins);
+                return Fail(messages, err, copied, backupDir);
+            }
+            catch (IOException ex)
+            {
+                var err = InjectorError.ExtractFailed("安装翻译模组失败。", ex.Message);
+                Report(err.Message, InstallPhase.WritePlugins);
+                return Fail(messages, err, copied, backupDir);
             }
 
             // —— 配置示例 ——
@@ -326,7 +367,11 @@ public sealed class GameInstaller : IInstaller
         return Path.Combine(root, "config", "Translator.cfg.example");
     }
 
-    internal static void ExtractZipToGameRoot(
+    /// <summary>
+    /// 解压 BepInEx zip 到游戏根。拒绝 zip-slip（<c>..</c> / 逃逸目标根）。
+    /// 成功返回 <c>null</c>，违规则返回类型化 <see cref="InjectorError"/>。
+    /// </summary>
+    internal static InjectorError? ExtractZipToGameRoot(
         string zipPath,
         string gameRoot,
         OverwritePolicy policy,
@@ -339,24 +384,51 @@ public sealed class GameInstaller : IInstaller
         {
             if (string.IsNullOrEmpty(entry.Name) && entry.FullName.EndsWith('/'))
             {
-                continue;
+                // 目录条目仍需做路径安全检查
             }
 
             var relative = BepInExLayoutPlanner.NormalizeZipEntry(entry.FullName);
+            if (relative is null)
+            {
+                return InjectorError.InvalidPath(
+                    "拒绝解压：zip 条目包含非法路径（可能为路径穿越）。",
+                    entry.FullName);
+            }
+
             if (string.IsNullOrEmpty(relative) || relative.EndsWith('/'))
             {
                 var dir = Path.Combine(gameRoot, relative.TrimEnd('/').Replace('/', Path.DirectorySeparatorChar));
+                if (!BepInExLayoutPlanner.IsStrictlyUnderDestination(gameRoot, dir))
+                {
+                    return InjectorError.InvalidPath(
+                        "拒绝解压：目录条目落在游戏根之外。",
+                        entry.FullName);
+                }
+
                 Directory.CreateDirectory(dir);
                 continue;
             }
 
             var dest = Path.Combine(gameRoot, relative.Replace('/', Path.DirectorySeparatorChar));
+            if (!BepInExLayoutPlanner.IsStrictlyUnderDestination(gameRoot, dest))
+            {
+                return InjectorError.InvalidPath(
+                    "拒绝解压：文件条目落在游戏根之外（zip-slip）。",
+                    entry.FullName);
+            }
+
             Directory.CreateDirectory(Path.GetDirectoryName(dest)!);
             ExtractEntryWithPolicy(entry, dest, policy, backupDir, copied, report);
         }
+
+        return null;
     }
 
-    internal static void ExtractTranslatorZip(
+    /// <summary>
+    /// 解压翻译模组 zip 到 plugins/Translator。拒绝 zip-slip。
+    /// 成功返回 <c>null</c>，违规则返回类型化 <see cref="InjectorError"/>。
+    /// </summary>
+    internal static InjectorError? ExtractTranslatorZip(
         string zipPath,
         string pluginDirectory,
         OverwritePolicy policy,
@@ -373,6 +445,15 @@ public sealed class GameInstaller : IInstaller
             }
 
             var name = entry.FullName.Replace('\\', '/');
+
+            // —— 原始条目先做穿越/绝对路径检测（避免 GetFileName 吞掉 ..）——
+            if (HasZipSlipRisk(name))
+            {
+                return InjectorError.InvalidPath(
+                    "拒绝解压翻译模组：zip 条目包含非法路径（可能为路径穿越）。",
+                    entry.FullName);
+            }
+
             var marker = "BepInEx/plugins/Translator/";
             string relative;
             var idx = name.IndexOf(marker, StringComparison.OrdinalIgnoreCase);
@@ -385,15 +466,63 @@ public sealed class GameInstaller : IInstaller
                 relative = Path.GetFileName(name);
             }
 
-            if (string.IsNullOrWhiteSpace(relative) || relative.EndsWith('/'))
+            // 对相对段同样拒绝 .. / 绝对路径
+            var safeRelative = BepInExLayoutPlanner.NormalizeZipEntry(relative);
+            if (safeRelative is null)
+            {
+                return InjectorError.InvalidPath(
+                    "拒绝解压翻译模组：zip 条目包含非法路径（可能为路径穿越）。",
+                    entry.FullName);
+            }
+
+            if (string.IsNullOrWhiteSpace(safeRelative) || safeRelative.EndsWith('/'))
             {
                 continue;
             }
 
-            var dest = Path.Combine(pluginDirectory, relative.Replace('/', Path.DirectorySeparatorChar));
+            var dest = Path.Combine(pluginDirectory, safeRelative.Replace('/', Path.DirectorySeparatorChar));
+            if (!BepInExLayoutPlanner.IsStrictlyUnderDestination(pluginDirectory, dest))
+            {
+                return InjectorError.InvalidPath(
+                    "拒绝解压翻译模组：文件条目落在插件目录之外（zip-slip）。",
+                    entry.FullName);
+            }
+
             Directory.CreateDirectory(Path.GetDirectoryName(dest)!);
             ExtractEntryWithPolicy(entry, dest, policy, backupDir, copied, report);
         }
+
+        return null;
+    }
+
+    /// <summary>条目名是否含 <c>..</c> 段、绝对路径或盘符（zip-slip 风险）。</summary>
+    internal static bool HasZipSlipRisk(string entryFullName)
+    {
+        if (string.IsNullOrWhiteSpace(entryFullName))
+        {
+            return true;
+        }
+
+        var raw = entryFullName.Replace('\\', '/');
+        if (raw.StartsWith('/') || raw.StartsWith("//", StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        if (raw.Length >= 2 && char.IsLetter(raw[0]) && raw[1] == ':')
+        {
+            return true;
+        }
+
+        foreach (var segment in raw.Split('/', StringSplitOptions.RemoveEmptyEntries))
+        {
+            if (segment == "..")
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     internal static void CopyTranslatorFromDirectory(

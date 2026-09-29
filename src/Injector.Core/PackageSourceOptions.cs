@@ -8,10 +8,16 @@ public sealed class PackageSourceOptions
     /// <summary>覆盖 Mono 用 BepInEx zip URL；空则用 <see cref="PackageCatalog.BepInEx5DownloadUrl"/>。</summary>
     public string? BepInExMonoUrl { get; set; }
 
-    /// <summary>覆盖 IL2CPP 用 BepInEx zip URL；空则用 <see cref="PackageCatalog.BepInEx6DownloadUrl"/>。</summary>
+    /// <summary>
+    /// 覆盖 IL2CPP 用 BepInEx zip URL；空则用默认 pin <see cref="PackageCatalog.BepInEx6DownloadUrl"/>（6.0.0-pre.2）。
+    /// 可指向 builds.bepinex.dev 的 BE zip（须 HTTPS）。
+    /// </summary>
     public string? BepInExIl2CppUrl { get; set; }
 
-    /// <summary>本地 BepInEx zip（若设置则优先于 URL）。</summary>
+    /// <summary>
+    /// 本地 BepInEx zip（若设置则优先于 URL）。
+    /// IL2CPP 可用 builds.bepinex.dev 下载的 <c>BepInEx-Unity.IL2CPP-win-x64-…</c>（含 BE.733）覆盖默认 pre.2。
+    /// </summary>
     public string? BepInExLocalZipPath { get; set; }
 
     /// <summary>
@@ -25,7 +31,7 @@ public sealed class PackageSourceOptions
     public string? TranslatorLocalArtifactsDirectory { get; set; }
 
     /// <summary>
-    /// 本模组远程 zip URL。空则尝试 GitHub latest release 资产约定；仍失败则仅允许本地 artifacts。
+    /// 本模组远程 zip URL（须 HTTPS + 允许主机）。空则按 <see cref="TranslatorReleaseTag"/> 拼 GitHub Release。
     /// </summary>
     public string? TranslatorDownloadUrl { get; set; }
 
@@ -35,7 +41,8 @@ public sealed class PackageSourceOptions
     public string? RepositoryRoot { get; set; }
 
     /// <summary>
-    /// GitHub Release tag（可选）。若同时提供 Owner/Repo，可拼出默认模组下载 URL。
+    /// GitHub Release tag。空则默认 <see cref="PackageCatalog.DefaultTranslatorReleaseTag"/>（<c>latest</c>）。
+    /// <c>latest</c> → <c>/releases/latest/download/{asset}</c>；其它 tag → <c>/releases/download/{tag}/{asset}</c>。
     /// </summary>
     public string? TranslatorReleaseTag { get; set; }
 

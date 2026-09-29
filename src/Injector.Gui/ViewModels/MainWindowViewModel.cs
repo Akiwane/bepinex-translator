@@ -28,8 +28,9 @@ public partial class MainWindowViewModel : ObservableObject
         StatusText = UiStrings.Ready;
         SelectedOverwriteItem = OverwritePolicies.First(p => p.Policy == _runtimeOptions.DefaultOverwritePolicy);
         PinNote =
-            $"BepInEx pin：Mono={PackageCatalog.BepInEx5Version}；IL2CPP={PackageCatalog.BepInEx6Version}。" +
-            $" 模组资产：{PackageCatalog.DefaultTranslatorReleaseAssetPattern}；优先本地 artifacts/。";
+            $"BepInEx pin：Mono={PackageCatalog.BepInEx5Version}；IL2CPP={PackageCatalog.BepInEx6Version}" +
+            $"（插件 NuGet {PackageCatalog.BepInEx6PluginNuGetVersion}，可用本地 zip/URL 覆盖）。" +
+            $" 模组默认远程：GitHub latest → {PackageCatalog.DefaultTranslatorReleaseAssetPattern}；优先本地 artifacts/。";
     }
 
     public IStorageProvider? StorageProvider { get; set; }

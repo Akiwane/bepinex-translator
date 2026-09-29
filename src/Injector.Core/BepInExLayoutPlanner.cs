@@ -55,6 +55,7 @@ public static class BepInExLayoutPlanner
     /// <summary>
     /// 规划：zip 内条目应落到游戏根的相对路径列表（用于单测断言，不执行 IO）。
     /// zip 相对路径若以 BepInEx/ 或 doorstop/winhttp 开头则原样保留。
+    /// 含 <c>..</c> / 绝对路径等不安全条目会被跳过。
     /// </summary>
     public static IReadOnlyList<string> PlanZipExtractRelativePaths(
         IEnumerable<string> zipEntryNames,
@@ -65,6 +66,7 @@ public static class BepInExLayoutPlanner
 
         foreach (var raw in zipEntryNames)
         {
+            // 不安全条目（zip-slip）不进入规划列表
             var name = NormalizeZipEntry(raw);
             if (string.IsNullOrEmpty(name) || name.EndsWith('/'))
             {
@@ -105,11 +107,42 @@ public static class BepInExLayoutPlanner
         return missing;
     }
 
-    internal static string NormalizeZipEntry(string entry)
+    /// <summary>
+    /// 规范化 zip 条目相对路径。含 <c>..</c>、空段或盘符/绝对路径时返回 <c>null</c>（调用方应拒绝解压）。
+    /// </summary>
+    internal static string? NormalizeZipEntry(string entry)
     {
-        var n = entry.Replace('\\', '/').TrimStart('/');
-        // 部分 zip 可能多一层顶层目录；若首段不是已知根文件/目录则剥一层
+        if (string.IsNullOrWhiteSpace(entry))
+        {
+            return null;
+        }
+
+        var raw = entry.Replace('\\', '/');
+
+        // —— 拒绝绝对路径 / UNC / Windows 盘符 ——
+        if (raw.StartsWith('/') || raw.StartsWith("//", StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        if (raw.Length >= 2 && char.IsLetter(raw[0]) && raw[1] == ':')
+        {
+            return null;
+        }
+
+        var n = raw.TrimStart('/');
         var parts = n.Split('/', StringSplitOptions.RemoveEmptyEntries);
+
+        // —— 在剥顶层目录之前先拒绝 ".." ——
+        foreach (var segment in parts)
+        {
+            if (segment == "..")
+            {
+                return null;
+            }
+        }
+
+        // 部分 zip 可能多一层顶层目录；若首段不是已知根文件/目录则剥一层
         if (parts.Length >= 2)
         {
             var first = parts[0];
@@ -117,13 +150,52 @@ public static class BepInExLayoutPlanner
                 or ".doorstop_version" or "changelog.txt";
             if (!known
                 && !first.EndsWith(".dll", StringComparison.OrdinalIgnoreCase)
-                && !first.EndsWith(".ini", StringComparison.OrdinalIgnoreCase))
+                && !first.EndsWith(".ini", StringComparison.OrdinalIgnoreCase)
+                && first != ".")
             {
-                n = string.Join('/', parts.Skip(1));
+                parts = parts.Skip(1).ToArray();
             }
         }
 
-        return n;
+        // —— 清理 "." 并再次确认无 ".." ——
+        var cleaned = new List<string>();
+        foreach (var segment in parts)
+        {
+            if (segment == "..")
+            {
+                return null;
+            }
+
+            if (segment == ".")
+            {
+                continue;
+            }
+
+            cleaned.Add(segment);
+        }
+
+        n = string.Join('/', cleaned);
+        return string.IsNullOrEmpty(n) ? null : n;
+    }
+
+    /// <summary>
+    /// 断言 <paramref name="candidatePath"/> 解析后的完整路径严格位于 <paramref name="destinationRoot"/> 之下
+    ///（或等于根本身）。使用带尾部分隔符的前缀比较，防止 <c>/games/foo</c> 误匹配 <c>/games/foobar</c>。
+    /// </summary>
+    internal static bool IsStrictlyUnderDestination(string destinationRoot, string candidatePath)
+    {
+        var rootFull = Path.GetFullPath(destinationRoot);
+        var candidateFull = Path.GetFullPath(candidatePath);
+
+        // 允许目标恰好为根目录本身（创建目录条目时）
+        if (string.Equals(rootFull, candidateFull, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        var rootPrefix = rootFull.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+                         + Path.DirectorySeparatorChar;
+        return candidateFull.StartsWith(rootPrefix, StringComparison.OrdinalIgnoreCase);
     }
 }
 

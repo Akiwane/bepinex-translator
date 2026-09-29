@@ -1,7 +1,7 @@
 namespace BepInExTranslator.Injector.Core;
 
 /// <summary>
-/// 按运行时解析 BepInEx 与翻译模组包来源（本地优先，其次配置 URL，再次默认 pin）。
+/// 按运行时解析 BepInEx 与翻译模组包来源（本地优先，其次配置 URL，再次默认 pin / latest Release）。
 /// </summary>
 public sealed class PackageResolver : IPackageResolver
 {
@@ -15,11 +15,25 @@ public sealed class PackageResolver : IPackageResolver
 
         try
         {
-            return PackageResolveResult.Ok(new[]
+            var bepinex = ResolveBepInEx(runtime, options);
+            var translator = ResolveTranslator(runtime, options);
+
+            // —— 远程 URL 信任（解析阶段尽早失败）——
+            foreach (var pkg in new[] { bepinex, translator })
             {
-                ResolveBepInEx(runtime, options),
-                ResolveTranslator(runtime, options),
-            });
+                if (pkg.SourceKind != PackageSourceKind.RemoteUrl)
+                {
+                    continue;
+                }
+
+                var trust = PackageDownloader.ValidateDownloadUrl(pkg.DownloadUrl);
+                if (trust != null)
+                {
+                    return PackageResolveResult.Fail(trust);
+                }
+            }
+
+            return PackageResolveResult.Ok(new[] { bepinex, translator });
         }
         catch (FileNotFoundException ex)
         {
@@ -35,7 +49,7 @@ public sealed class PackageResolver : IPackageResolver
 
     public ResolvedPackage ResolveBepInEx(UnityRuntimeKind runtime, PackageSourceOptions options)
     {
-        // —— 本地 zip 优先 ——
+        // —— 本地 zip 优先（含 BE.733 等覆盖默认 pre.2）——
         if (!string.IsNullOrWhiteSpace(options.BepInExLocalZipPath))
         {
             var local = Path.GetFullPath(options.BepInExLocalZipPath);
@@ -69,7 +83,9 @@ public sealed class PackageResolver : IPackageResolver
             url = string.IsNullOrWhiteSpace(options.BepInExIl2CppUrl)
                 ? PackageCatalog.BepInEx6DownloadUrl
                 : options.BepInExIl2CppUrl.Trim();
-            version = PackageCatalog.BepInEx6Version;
+            version = string.IsNullOrWhiteSpace(options.BepInExIl2CppUrl)
+                ? PackageCatalog.BepInEx6Version
+                : "url-override";
         }
 
         return new ResolvedPackage
@@ -131,28 +147,28 @@ public sealed class PackageResolver : IPackageResolver
             };
         }
 
-        if (!string.IsNullOrWhiteSpace(options.TranslatorReleaseTag))
+        // —— 默认远程：TranslatorReleaseTag 或 Catalog 默认 latest ——
+        var tag = string.IsNullOrWhiteSpace(options.TranslatorReleaseTag)
+            ? PackageCatalog.DefaultTranslatorReleaseTag
+            : options.TranslatorReleaseTag.Trim();
+        var url = PackageCatalog.BuildTranslatorReleaseDownloadUrl(
+            runtime,
+            tag,
+            options.TranslatorGitHubOwner,
+            options.TranslatorGitHubRepo);
+        var runtimeKey = runtime == UnityRuntimeKind.Mono ? "mono" : "il2cpp";
+        var asset = PackageCatalog.DefaultTranslatorReleaseAssetPattern
+            .Replace("{runtime}", runtimeKey, StringComparison.Ordinal);
+
+        return new ResolvedPackage
         {
-            var runtimeKey = runtime == UnityRuntimeKind.Mono ? "mono" : "il2cpp";
-            var asset = PackageCatalog.DefaultTranslatorReleaseAssetPattern
-                .Replace("{runtime}", runtimeKey, StringComparison.Ordinal);
-            var url =
-                $"https://github.com/{options.TranslatorGitHubOwner}/{options.TranslatorGitHubRepo}/releases/download/{options.TranslatorReleaseTag}/{asset}";
-
-            return new ResolvedPackage
-            {
-                Kind = PackageKind.TranslatorMod,
-                SourceKind = PackageSourceKind.RemoteUrl,
-                Runtime = runtime,
-                VersionLabel = options.TranslatorReleaseTag!,
-                DownloadUrl = url,
-                DisplayName = $"Translator（GitHub {options.TranslatorReleaseTag}/{asset}）",
-            };
-        }
-
-        throw new InvalidOperationException(
-            "未找到翻译模组包：请先构建 artifacts/mono 或 artifacts/il2cpp，" +
-            "或指定本地 zip / 下载 URL / Release tag。详见 docs/injector.md。");
+            Kind = PackageKind.TranslatorMod,
+            SourceKind = PackageSourceKind.RemoteUrl,
+            Runtime = runtime,
+            VersionLabel = tag,
+            DownloadUrl = url,
+            DisplayName = $"Translator（GitHub {tag}/{asset}）",
+        };
     }
 
     internal static string? ResolveArtifactsDirectory(UnityRuntimeKind runtime, PackageSourceOptions options)

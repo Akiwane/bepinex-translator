@@ -2,9 +2,22 @@ namespace BepInExTranslator.Injector.Core;
 
 /// <summary>
 /// 下载远程包到本地缓存目录。下载产物不得提交进 git。
+/// 仅允许 HTTPS，且主机须在允许列表内。
 /// </summary>
 public sealed class PackageDownloader
 {
+    /// <summary>
+    /// 允许下载的主机（大小写不敏感）。
+    /// 额外主机：<c>builds.bepinex.dev</c>（Bleeding Edge zip）、GitHub release CDN。
+    /// </summary>
+    public static IReadOnlyList<string> AllowedDownloadHosts { get; } = new[]
+    {
+        "github.com",
+        "objects.githubusercontent.com",
+        "release-assets.githubusercontent.com",
+        "builds.bepinex.dev",
+    };
+
     private readonly HttpClient _http;
 
     public PackageDownloader(HttpClient? httpClient = null)
@@ -18,6 +31,44 @@ public sealed class PackageDownloader
         {
             _http.DefaultRequestHeaders.UserAgent.ParseAdd("BepInExTranslator-Injector/1.1");
         }
+    }
+
+    /// <summary>
+    /// 校验下载 URL：必须 HTTPS，且 Host 在 <see cref="AllowedDownloadHosts"/> 中。
+    /// 合法返回 <c>null</c>；否则返回类型化 <see cref="InjectorError"/>。
+    /// </summary>
+    public static InjectorError? ValidateDownloadUrl(string? url)
+    {
+        if (string.IsNullOrWhiteSpace(url))
+        {
+            return InjectorError.DownloadFailed("下载 URL 为空。");
+        }
+
+        if (!Uri.TryCreate(url.Trim(), UriKind.Absolute, out var uri))
+        {
+            return InjectorError.DownloadFailed("下载 URL 格式无效。", url);
+        }
+
+        if (!string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
+        {
+            return InjectorError.DownloadFailed(
+                "仅允许 HTTPS 下载。",
+                $"scheme={uri.Scheme}; url={url}");
+        }
+
+        var host = uri.Host;
+        // 仅精确匹配允许列表主机（github.com / objects.githubusercontent.com 等）
+        var allowed = AllowedDownloadHosts.Any(h =>
+            string.Equals(h, host, StringComparison.OrdinalIgnoreCase));
+
+        if (!allowed)
+        {
+            return InjectorError.DownloadFailed(
+                "下载主机不在允许列表中。允许：github.com、objects.githubusercontent.com、release-assets.githubusercontent.com、builds.bepinex.dev。",
+                host);
+        }
+
+        return null;
     }
 
     /// <summary>
@@ -63,6 +114,14 @@ public sealed class PackageDownloader
         IProgress<string>? log = null,
         CancellationToken cancellationToken = default)
     {
+        // —— URL 信任：HTTPS + 主机允许列表 ——
+        var trustError = ValidateDownloadUrl(url);
+        if (trustError != null)
+        {
+            throw new InvalidOperationException(trustError.Message +
+                (string.IsNullOrEmpty(trustError.Detail) ? string.Empty : " (" + trustError.Detail + ")"));
+        }
+
         Directory.CreateDirectory(cacheDirectory);
         var fileName = GuessFileName(url);
         var dest = Path.Combine(cacheDirectory, fileName);
