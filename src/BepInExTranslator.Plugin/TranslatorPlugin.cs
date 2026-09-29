@@ -1,9 +1,6 @@
 using System;
-using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using BepInEx;
-using BepInEx.Configuration;
 using BepInEx.Logging;
 using BepInExTranslator.Core;
 using BepInExTranslator.Core.Backends;
@@ -15,6 +12,7 @@ namespace BepInExTranslator
 {
     /// <summary>
     /// BepInEx 5（Unity Mono）通用翻译插件入口。
+    /// 配置字段与 config/Translator.cfg.example 契约对齐。
     /// </summary>
     [BepInPlugin(PluginGuid, PluginName, PluginVersion)]
     public sealed partial class TranslatorPlugin : BaseUnityPlugin
@@ -34,25 +32,24 @@ namespace BepInExTranslator
             Log = Logger;
             Settings = PluginSettings.Bind(Config);
 
-            // 产物默认：BepInEx/plugins/BepInExTranslator/translations.json
-            // 也可在配置中改到 BepInEx/config 下
-            var cachePath = ResolveCachePath(Settings);
+            // 产物路径：General.ProductJsonPath（默认 BepInEx/plugins/Translator/translations.json）
+            var cachePath = ResolveProductJsonPath(Settings.ProductJsonPath.Value);
             var cache = new TranslationCache(cachePath);
             try
             {
                 cache.Load();
-                Log.LogInfo($"Loaded translation cache: {cache.Count} entries from {cachePath}");
+                Log.LogInfo($"Loaded translation product: {cache.Count} entries from {cachePath}");
             }
             catch (Exception ex)
             {
-                Log.LogError($"Failed to load translation cache: {ex.Message}");
+                Log.LogError($"Failed to load translation product: {ex.Message}");
             }
 
             ITranslationBackend backend;
             try
             {
                 backend = BackendFactory.Create(Settings);
-                Log.LogInfo($"Translation backend: {backend.Name}");
+                Log.LogInfo($"Translation backend: {backend.Name} ({Settings.BackendType.Value})");
             }
             catch (Exception ex)
             {
@@ -83,23 +80,50 @@ namespace BepInExTranslator
             _harmony?.UnpatchSelf();
         }
 
-        private static string ResolveCachePath(PluginSettings settings)
+        /// <summary>
+        /// 解析产物路径：绝对路径原样；相对路径依次相对 BepInEx 根、游戏根。
+        /// </summary>
+        internal static string ResolveProductJsonPath(string? configured)
         {
-            var configured = settings.CacheFilePath.Value;
-            if (!string.IsNullOrWhiteSpace(configured))
+            if (string.IsNullOrWhiteSpace(configured))
             {
-                if (Path.IsPathRooted(configured))
-                {
-                    return configured;
-                }
-
-                return Path.GetFullPath(Path.Combine(Paths.BepInExRootPath, configured));
+                configured = "BepInEx/plugins/Translator/translations.json";
             }
 
-            // 默认写到插件目录，便于与 DLL 一起分发/人工精翻
-            var pluginDir = Path.Combine(Paths.PluginPath, "BepInExTranslator");
-            Directory.CreateDirectory(pluginDir);
-            return Path.Combine(pluginDir, "translations.json");
+            if (Path.IsPathRooted(configured))
+            {
+                EnsureParentDirectory(configured);
+                return configured;
+            }
+
+            // 相对 BepInEx 根
+            var fromBepInEx = Path.GetFullPath(Path.Combine(Paths.BepInExRootPath, configured));
+            // 若配置已含 BepInEx/ 前缀，相对游戏根更自然
+            var fromGame = Path.GetFullPath(Path.Combine(Paths.GameRootPath, configured));
+
+            string chosen;
+            if (configured.StartsWith("BepInEx", StringComparison.OrdinalIgnoreCase)
+                || configured.StartsWith("BepInEx/", StringComparison.OrdinalIgnoreCase)
+                || configured.StartsWith("BepInEx\\", StringComparison.OrdinalIgnoreCase))
+            {
+                chosen = fromGame;
+            }
+            else
+            {
+                chosen = fromBepInEx;
+            }
+
+            EnsureParentDirectory(chosen);
+            return chosen;
+        }
+
+        private static void EnsureParentDirectory(string filePath)
+        {
+            var dir = Path.GetDirectoryName(filePath);
+            if (!string.IsNullOrEmpty(dir))
+            {
+                Directory.CreateDirectory(dir);
+            }
         }
     }
 

@@ -17,7 +17,7 @@ namespace BepInExTranslator.Core.Backends
     {
         private readonly HttpJsonTemplateOptions _options;
 
-        public string Name => "HttpJsonTemplate";
+        public string Name => "HttpTemplate";
 
         public HttpJsonTemplateBackend(HttpJsonTemplateOptions options)
         {
@@ -36,7 +36,7 @@ namespace BepInExTranslator.Core.Backends
             }
 
             var placeholders = TemplateFiller.BuildTranslationPlaceholders(source, targetLang);
-            // Body 内文本需 JSON 转义
+            // Body 内 source/text 需 JSON 转义
             var body = TemplateFiller.FillJsonSafe(
                 _options.BodyTemplate,
                 placeholders,
@@ -101,9 +101,9 @@ namespace BepInExTranslator.Core.Backends
         public string Method { get; set; } = "POST";
         public string ContentType { get; set; } = "application/json; charset=utf-8";
         public string BodyTemplate { get; set; } =
-            "{\"text\":\"{{text}}\",\"target\":\"{{target_lang}}\"}";
-        /// <summary>点分路径，如 translation 或 data.translatedText。</summary>
-        public string ResponseJsonPath { get; set; } = "translation";
+            "{\"q\":\"{source}\",\"target\":\"{targetLanguage}\",\"id\":\"{hash}\"}";
+        /// <summary>点分路径，如 data.translation 或 choices.0.message.content。</summary>
+        public string ResponseJsonPath { get; set; } = "data.translation";
         public int TimeoutMs { get; set; } = 15000;
         public Dictionary<string, string> Headers { get; set; } = new Dictionary<string, string>();
     }
@@ -135,17 +135,23 @@ namespace BepInExTranslator.Core.Backends
                 var index = -1;
                 var name = segment;
 
-                // 支持 field[0]
-                var bracket = segment.IndexOf('[');
-                if (bracket >= 0 && segment.EndsWith("]", StringComparison.Ordinal))
+            // 支持 field[0] 与 field.0 两种下标写法（契约示例用 choices.0.message.content）
+            var bracket = segment.IndexOf('[');
+            if (bracket >= 0 && segment.EndsWith("]", StringComparison.Ordinal))
+            {
+                name = segment.Substring(0, bracket);
+                var idxText = segment.Substring(bracket + 1, segment.Length - bracket - 2);
+                if (!int.TryParse(idxText, out index))
                 {
-                    name = segment.Substring(0, bracket);
-                    var idxText = segment.Substring(bracket + 1, segment.Length - bracket - 2);
-                    if (!int.TryParse(idxText, out index))
-                    {
-                        return null;
-                    }
+                    return null;
                 }
+            }
+            else if (int.TryParse(segment, out var dottedIndex))
+            {
+                // 纯数字段：当作数组下标
+                name = string.Empty;
+                index = dottedIndex;
+            }
 
                 if (!string.IsNullOrEmpty(name))
                 {

@@ -7,8 +7,7 @@ using UnityEngine;
 namespace BepInExTranslator.Services
 {
     /// <summary>
-    /// 字体解析：Default / BuiltIn / System / CustomFile。
-    /// Unity 跨版本加载自定义 TTF 的能力并不统一，失败时回退并记日志。
+    /// 字体解析：FontSourceType = Unity | System | CustomFile，路径见 FontPath / docs/fonts.md。
     /// </summary>
     public sealed class FontProvider
     {
@@ -32,8 +31,6 @@ namespace BepInExTranslator.Services
             }
 
             var type = component.GetType();
-
-            // UGUI Text / TextMesh: font property
             var fontProp = type.GetProperty("font", BindingFlags.Instance | BindingFlags.Public);
             if (fontProp != null && fontProp.CanWrite && typeof(Font).IsAssignableFrom(fontProp.PropertyType))
             {
@@ -41,13 +38,7 @@ namespace BepInExTranslator.Services
                 return;
             }
 
-            // TMP: 需要 TMP_FontAsset，无法从普通 Font 直接构造（版本相关）。
-            // 文档说明：CustomFile 对 TMP 需使用 TMP Font Asset；此处仅尝试同名属性。
-            var tmpFont = type.GetProperty("font", BindingFlags.Instance | BindingFlags.Public);
-            if (tmpFont != null && tmpFont.CanWrite)
-            {
-                _log.LogDebug("TMP font override requires a TMP_FontAsset; skipping automatic Font assignment.");
-            }
+            _log.LogDebug("TMP font override requires a TMP_FontAsset; skipping automatic Font assignment.");
         }
 
         private Font? Resolve()
@@ -58,75 +49,88 @@ namespace BepInExTranslator.Services
             }
 
             _resolved = true;
-            var source = (_settings.FontSource.Value ?? "Default").Trim();
+            var sourceType = (_settings.FontSourceType.Value ?? "System").Trim();
+            var path = _settings.FontPath.Value ?? string.Empty;
 
             try
             {
-                if (source.Equals("BuiltIn", StringComparison.OrdinalIgnoreCase))
+                if (sourceType.Equals("Unity", StringComparison.OrdinalIgnoreCase)
+                    || sourceType.Equals("BuiltIn", StringComparison.OrdinalIgnoreCase))
                 {
-                    _cached = Resources.GetBuiltinResource<Font>("Arial.ttf");
+                    // Unity：内置/资源字体名，如 Arial.ttf
+                    var name = string.IsNullOrWhiteSpace(path) ? "Arial.ttf" : path;
+                    _cached = Resources.GetBuiltinResource<Font>(Path.GetFileName(name));
+                    if (_cached == null)
+                    {
+                        _cached = Resources.GetBuiltinResource<Font>("Arial.ttf");
+                    }
                 }
-                else if (source.Equals("System", StringComparison.OrdinalIgnoreCase))
+                else if (sourceType.Equals("System", StringComparison.OrdinalIgnoreCase))
                 {
-                    var name = string.IsNullOrWhiteSpace(_settings.SystemFontName.Value)
-                        ? "Arial"
-                        : _settings.SystemFontName.Value;
+                    var name = string.IsNullOrWhiteSpace(path) ? "Arial" : path;
                     _cached = Font.CreateDynamicFontFromOSFont(name, 16);
                 }
-                else if (source.Equals("CustomFile", StringComparison.OrdinalIgnoreCase))
+                else if (sourceType.Equals("CustomFile", StringComparison.OrdinalIgnoreCase))
                 {
-                    _cached = LoadCustom(_settings.CustomFontPath.Value);
+                    _cached = LoadCustomFile(path);
                 }
                 else
                 {
-                    _cached = null; // Default：不改字体
+                    _log.LogWarning("Unknown FontSourceType: " + sourceType);
                 }
             }
             catch (Exception ex)
             {
-                _log.LogWarning($"Font resolve failed ({source}): {ex.Message}");
+                _log.LogWarning($"Font resolve failed ({sourceType}): {ex.Message}");
                 _cached = null;
             }
 
             return _cached;
         }
 
-        private Font? LoadCustom(string? pathOrName)
+        private Font? LoadCustomFile(string? pathOrName)
         {
             if (string.IsNullOrWhiteSpace(pathOrName))
             {
-                _log.LogWarning("Font.Source=CustomFile but CustomFontPath is empty.");
+                _log.LogWarning("FontSourceType=CustomFile but FontPath is empty.");
                 return null;
             }
 
-            // 1) 若是已安装字体名，走 OS 动态字体
-            try
+            // 相对路径：相对游戏根 / BepInEx 根
+            var resolved = pathOrName;
+            if (!Path.IsPathRooted(pathOrName))
             {
-                var os = Font.CreateDynamicFontFromOSFont(pathOrName, 16);
-                if (os != null)
+                var fromGame = Path.GetFullPath(Path.Combine(BepInEx.Paths.GameRootPath, pathOrName));
+                var fromBep = Path.GetFullPath(Path.Combine(BepInEx.Paths.BepInExRootPath, pathOrName));
+                if (File.Exists(fromGame))
                 {
-                    return os;
+                    resolved = fromGame;
+                }
+                else if (File.Exists(fromBep))
+                {
+                    resolved = fromBep;
                 }
             }
-            catch
-            {
-                // continue
-            }
 
-            // 2) 文件路径：Unity 没有稳定的跨版本公开 TTF 加载 API。
-            // 尝试把文件名（去扩展名）当 OS 字体名；并提示用户安装字体或使用 AssetBundle/TMP。
-            if (File.Exists(pathOrName))
+            if (File.Exists(resolved))
             {
-                var name = Path.GetFileNameWithoutExtension(pathOrName);
+                var name = Path.GetFileNameWithoutExtension(resolved);
                 _log.LogWarning(
                     "Custom TTF/OTF file loading is Unity-version dependent and not guaranteed. " +
-                    "Attempting OS font by file name: " + name +
-                    ". Prefer installing the font on the system or providing a TMP_FontAsset for TextMeshPro.");
+                    "Attempting OS font by file name: " + name + ". See docs/fonts.md.");
                 return Font.CreateDynamicFontFromOSFont(name, 16);
             }
 
-            _log.LogWarning("Custom font path not found: " + pathOrName);
-            return null;
+            // 当作已安装字体名再试一次
+            try
+            {
+                return Font.CreateDynamicFontFromOSFont(pathOrName, 16);
+            }
+            catch
+            {
+                _log.LogWarning("Custom font path not found: " + pathOrName);
+                return null;
+            }
         }
     }
 }

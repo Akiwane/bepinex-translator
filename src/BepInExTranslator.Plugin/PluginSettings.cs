@@ -5,197 +5,268 @@ using BepInEx.Configuration;
 namespace BepInExTranslator
 {
     /// <summary>
-    /// BepInEx ConfigFile 绑定。密钥仅存本地 cfg，切勿提交仓库。
+    /// BepInEx ConfigFile 绑定。字段名与 config/Translator.cfg.example 契约一致。
+    /// 密钥仅存本地 cfg，切勿提交仓库。
     /// </summary>
     public sealed class PluginSettings
     {
+        // —— General ——
         public ConfigEntry<string> TargetLanguage { get; private set; } = null!;
-        public ConfigEntry<string> BackendType { get; private set; } = null!;
+        public ConfigEntry<string> ProductJsonPath { get; private set; } = null!;
         public ConfigEntry<int> TimeoutMs { get; private set; } = null!;
-        public ConfigEntry<string> CacheFilePath { get; private set; } = null!;
+        public ConfigEntry<string> BackendType { get; private set; } = null!;
 
-        // HTTP JSON 模板
-        public ConfigEntry<string> HttpUrl { get; private set; } = null!;
-        public ConfigEntry<string> HttpMethod { get; private set; } = null!;
-        public ConfigEntry<string> HttpBodyTemplate { get; private set; } = null!;
-        public ConfigEntry<string> HttpResponseJsonPath { get; private set; } = null!;
-        public ConfigEntry<string> HttpHeaders { get; private set; } = null!;
+        // —— HttpTemplate ——
+        public ConfigEntry<string> EndpointUrl { get; private set; } = null!;
+        public ConfigEntry<string> HeadersJson { get; private set; } = null!;
+        public ConfigEntry<string> BodyTemplate { get; private set; } = null!;
+        public ConfigEntry<string> ResponseTranslationPath { get; private set; } = null!;
 
-        // OpenAI 兼容
-        public ConfigEntry<string> OpenAiEndpoint { get; private set; } = null!;
-        public ConfigEntry<string> OpenAiApiKey { get; private set; } = null!;
-        public ConfigEntry<string> OpenAiModel { get; private set; } = null!;
-        public ConfigEntry<string> OpenAiSystemPrompt { get; private set; } = null!;
+        // —— LlmOpenAiCompatible ——
+        public ConfigEntry<string> BaseUrl { get; private set; } = null!;
+        public ConfigEntry<string> Model { get; private set; } = null!;
+        public ConfigEntry<string> ApiKey { get; private set; } = null!;
+        public ConfigEntry<string> SystemPrompt { get; private set; } = null!;
+        public ConfigEntry<string> ChatCompletionsPath { get; private set; } = null!;
 
-        // 布局 / 字体
-        public ConfigEntry<bool> AutoResizeFont { get; private set; } = null!;
-        public ConfigEntry<float> MinFontScale { get; private set; } = null!;
-        public ConfigEntry<float> MinFontSize { get; private set; } = null!;
-        public ConfigEntry<string> FontSource { get; private set; } = null!;
-        public ConfigEntry<string> SystemFontName { get; private set; } = null!;
-        public ConfigEntry<string> CustomFontPath { get; private set; } = null!;
+        // —— Layout / Font ——
+        public ConfigEntry<bool> AutoShrinkFontSize { get; private set; } = null!;
+        public ConfigEntry<string> FontSourceType { get; private set; } = null!;
+        public ConfigEntry<string> FontPath { get; private set; } = null!;
 
+        // —— Hooks（实现细节，契约未强制；默认全开）——
         public ConfigEntry<bool> EnableUgui { get; private set; } = null!;
         public ConfigEntry<bool> EnableTextMeshPro { get; private set; } = null!;
         public ConfigEntry<bool> EnableTextMesh { get; private set; } = null!;
+
+        // 布局辅助（契约仅要求 AutoShrinkFontSize；以下为安全下限）
+        public ConfigEntry<float> MinFontScale { get; private set; } = null!;
+        public ConfigEntry<float> MinFontSize { get; private set; } = null!;
 
         public static PluginSettings Bind(ConfigFile config)
         {
             var s = new PluginSettings();
 
-            // —— 通用 ——
+            // General — 与 Translator.cfg.example 同名
             s.TargetLanguage = config.Bind(
                 "General",
                 "TargetLanguage",
                 "zh-CN",
                 "目标语言（BCP-47），默认 zh-CN");
 
-            s.BackendType = config.Bind(
+            s.ProductJsonPath = config.Bind(
                 "General",
-                "BackendType",
-                "HttpJsonTemplate",
-                "后端类型：HttpJsonTemplate | OpenAiCompatible");
+                "ProductJsonPath",
+                "BepInEx/plugins/Translator/translations.json",
+                "翻译产物 JSON 路径（绝对路径，或相对游戏/BepInEx 根目录）");
 
             s.TimeoutMs = config.Bind(
                 "General",
                 "TimeoutMs",
-                20000,
-                "HTTP 请求超时（毫秒）");
+                15000,
+                "HTTP / LLM 请求超时（毫秒）");
 
-            s.CacheFilePath = config.Bind(
+            s.BackendType = config.Bind(
                 "General",
-                "CacheFilePath",
-                "",
-                "翻译产物 JSON 路径。留空= BepInEx/plugins/BepInExTranslator/translations.json；相对路径相对 BepInEx 根目录");
+                "BackendType",
+                "HttpTemplate",
+                "后端类型：HttpTemplate | LlmOpenAiCompatible");
 
-            // —— HTTP 模板 ——
-            s.HttpUrl = config.Bind(
-                "HttpJsonTemplate",
-                "Url",
-                "https://example.invalid/translate",
-                "翻译 API URL，可含 {{text}} / {{target_lang}} 占位符");
+            // HttpTemplate
+            s.EndpointUrl = config.Bind(
+                "HttpTemplate",
+                "EndpointUrl",
+                "https://example.com/api/translate",
+                "完整请求 URL；占位符 {source} {targetLanguage} {hash}");
 
-            s.HttpMethod = config.Bind(
-                "HttpJsonTemplate",
-                "Method",
-                "POST",
-                "HTTP 方法");
+            s.HeadersJson = config.Bind(
+                "HttpTemplate",
+                "HeadersJson",
+                "{\"Authorization\":\"Bearer YOUR_API_KEY\",\"Content-Type\":\"application/json\"}",
+                "额外 HTTP 头（JSON 对象）；值可含占位符。勿提交真实密钥");
 
-            s.HttpBodyTemplate = config.Bind(
-                "HttpJsonTemplate",
+            s.BodyTemplate = config.Bind(
+                "HttpTemplate",
                 "BodyTemplate",
-                "{\"text\":\"{{text}}\",\"target\":\"{{target_lang}}\"}",
-                "JSON body 模板；{{text}} 会自动做 JSON 转义");
+                "{\"q\":\"{source}\",\"target\":\"{targetLanguage}\",\"id\":\"{hash}\"}",
+                "请求体模板；占位符 {source} {targetLanguage} {hash}");
 
-            s.HttpResponseJsonPath = config.Bind(
-                "HttpJsonTemplate",
-                "ResponseJsonPath",
-                "translation",
-                "响应中译文的点分路径，如 translation 或 data.translatedText");
+            s.ResponseTranslationPath = config.Bind(
+                "HttpTemplate",
+                "ResponseTranslationPath",
+                "data.translation",
+                "响应中译文的 JSON 路径，如 data.translation");
 
-            s.HttpHeaders = config.Bind(
-                "HttpJsonTemplate",
-                "Headers",
-                "",
-                "额外请求头，每行 Key: Value；值可含占位符。勿把密钥提交到 git");
+            // LlmOpenAiCompatible
+            s.BaseUrl = config.Bind(
+                "LlmOpenAiCompatible",
+                "BaseUrl",
+                "https://api.openai.com/v1",
+                "OpenAI 兼容 API Base URL");
 
-            // —— OpenAI 兼容 ——
-            s.OpenAiEndpoint = config.Bind(
-                "OpenAiCompatible",
-                "Endpoint",
-                "https://api.openai.com/v1/chat/completions",
-                "Chat Completions 完整 URL");
-
-            s.OpenAiApiKey = config.Bind(
-                "OpenAiCompatible",
-                "ApiKey",
-                "",
-                "API Key（仅本地配置，切勿提交仓库）");
-
-            s.OpenAiModel = config.Bind(
-                "OpenAiCompatible",
+            s.Model = config.Bind(
+                "LlmOpenAiCompatible",
                 "Model",
                 "gpt-4o-mini",
-                "模型名");
+                "模型 ID");
 
-            s.OpenAiSystemPrompt = config.Bind(
-                "OpenAiCompatible",
+            s.ApiKey = config.Bind(
+                "LlmOpenAiCompatible",
+                "ApiKey",
+                "YOUR_API_KEY",
+                "API Key（仅本地配置，切勿提交仓库）");
+
+            s.SystemPrompt = config.Bind(
+                "LlmOpenAiCompatible",
                 "SystemPrompt",
-                "You are a translator. Translate the user message into {{target_lang}}. Reply with only the translation, no quotes or explanation.",
-                "系统提示词模板");
+                "You are a game UI translator. Translate faithfully; keep placeholders and markup intact.",
+                "系统提示词");
 
-            // —— 布局 / 字体 ——
-            s.AutoResizeFont = config.Bind(
+            s.ChatCompletionsPath = config.Bind(
+                "LlmOpenAiCompatible",
+                "ChatCompletionsPath",
+                "/chat/completions",
+                "相对 BaseUrl 的 Chat Completions 路径");
+
+            // Layout
+            s.AutoShrinkFontSize = config.Bind(
                 "Layout",
-                "AutoResizeFont",
+                "AutoShrinkFontSize",
                 true,
-                "译文更长时自动缩小字号并尝试开启换行");
+                "长译文在容器内自动缩小字号并尝试开启换行");
 
             s.MinFontScale = config.Bind(
                 "Layout",
                 "MinFontScale",
                 0.5f,
-                "相对原字号的最小缩放比例");
+                "相对原字号的最小缩放比例（实现细节）");
 
             s.MinFontSize = config.Bind(
                 "Layout",
                 "MinFontSize",
                 8f,
-                "最小字号绝对值");
+                "最小字号绝对值（实现细节）");
 
-            s.FontSource = config.Bind(
+            // Font
+            s.FontSourceType = config.Bind(
                 "Font",
-                "Source",
-                "Default",
-                "字体来源：Default | BuiltIn | System | CustomFile");
+                "FontSourceType",
+                "System",
+                "字体来源：Unity | System | CustomFile");
 
-            s.SystemFontName = config.Bind(
+            s.FontPath = config.Bind(
                 "Font",
-                "SystemFontName",
-                "Arial",
-                "Source=System 时的系统字体名（如 Microsoft YaHei）");
+                "FontPath",
+                "Microsoft YaHei",
+                "含义随 FontSourceType 变化，见 docs/fonts.md");
 
-            s.CustomFontPath = config.Bind(
-                "Font",
-                "CustomFontPath",
-                "",
-                "Source=CustomFile 时的字体文件路径或已安装字体名。Unity 版本差异见 README");
-
+            // Hooks
             s.EnableUgui = config.Bind("Hooks", "EnableUguiText", true, "Hook UnityEngine.UI.Text");
-            s.EnableTextMeshPro = config.Bind("Hooks", "EnableTextMeshPro", true, "Hook TextMeshPro / TMP_Text（反射软依赖）");
+            s.EnableTextMeshPro = config.Bind("Hooks", "EnableTextMeshPro", true, "Hook TextMeshPro / TMP_Text");
             s.EnableTextMesh = config.Bind("Hooks", "EnableTextMesh", true, "Hook 旧版 TextMesh");
 
             return s;
         }
 
-        /// <summary>解析 Headers 配置（每行 Key: Value）。</summary>
-        public Dictionary<string, string> ParseHeaders()
+        /// <summary>解析 HeadersJson（简单 JSON 对象字符串）。</summary>
+        public Dictionary<string, string> ParseHeadersJson()
+        {
+            return SimpleHeaderJson.ParseObject(HeadersJson.Value);
+        }
+    }
+
+    /// <summary>解析 {"Key":"Value",...} 形态的简易 JSON 对象（仅字符串值）。</summary>
+    internal static class SimpleHeaderJson
+    {
+        public static Dictionary<string, string> ParseObject(string? json)
         {
             var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            var raw = HttpHeaders.Value;
-            if (string.IsNullOrWhiteSpace(raw))
+            if (string.IsNullOrWhiteSpace(json))
             {
                 return map;
             }
 
-            var lines = raw.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
-            foreach (var line in lines)
+            var s = json.Trim();
+            if (s.Length < 2 || s[0] != '{')
             {
-                var idx = line.IndexOf(':');
-                if (idx <= 0)
+                return map;
+            }
+
+            var i = 1;
+            while (i < s.Length)
+            {
+                SkipWs(s, ref i);
+                if (i < s.Length && s[i] == '}')
                 {
-                    continue;
+                    break;
                 }
 
-                var key = line.Substring(0, idx).Trim();
-                var value = line.Substring(idx + 1).Trim();
+                if (i >= s.Length || s[i] != '"')
+                {
+                    break;
+                }
+
+                var key = ReadString(s, ref i);
+                SkipWs(s, ref i);
+                if (i >= s.Length || s[i] != ':')
+                {
+                    break;
+                }
+
+                i++;
+                SkipWs(s, ref i);
+                if (i >= s.Length || s[i] != '"')
+                {
+                    break;
+                }
+
+                var value = ReadString(s, ref i);
                 if (!string.IsNullOrEmpty(key))
                 {
                     map[key] = value;
                 }
+
+                SkipWs(s, ref i);
+                if (i < s.Length && s[i] == ',')
+                {
+                    i++;
+                }
             }
 
             return map;
+        }
+
+        private static void SkipWs(string s, ref int i)
+        {
+            while (i < s.Length && char.IsWhiteSpace(s[i]))
+            {
+                i++;
+            }
+        }
+
+        private static string ReadString(string s, ref int i)
+        {
+            i++; // opening quote
+            var start = i;
+            var sb = new System.Text.StringBuilder();
+            while (i < s.Length)
+            {
+                var ch = s[i++];
+                if (ch == '\\' && i < s.Length)
+                {
+                    sb.Append(s[i++]);
+                    continue;
+                }
+
+                if (ch == '"')
+                {
+                    return sb.ToString();
+                }
+
+                sb.Append(ch);
+            }
+
+            return s.Substring(start);
         }
     }
 }

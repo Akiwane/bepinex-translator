@@ -40,13 +40,26 @@ namespace BepInExTranslator.Core.Tests
         }
 
         [Fact]
-        public void BuildTranslationPlaceholders_ContainsAliases()
+        public void BuildTranslationPlaceholders_ContainsContractKeys()
         {
             var map = TemplateFiller.BuildTranslationPlaceholders("x", "ja");
-            Assert.Equal("x", map["text"]);
             Assert.Equal("x", map["source"]);
-            Assert.Equal("ja", map["target_lang"]);
-            Assert.Equal("ja", map["lang"]);
+            Assert.Equal("ja", map["targetLanguage"]);
+            Assert.False(string.IsNullOrEmpty(map["hash"]));
+            Assert.Equal(TextHasher.ComputeHash("x"), map["hash"]);
+        }
+
+        [Fact]
+        public void Fill_SupportsSingleBraceContractPlaceholders()
+        {
+            var values = TemplateFiller.BuildTranslationPlaceholders("Hello", "zh-CN");
+            var body = TemplateFiller.FillJsonSafe(
+                "{\"q\":\"{source}\",\"target\":\"{targetLanguage}\",\"id\":\"{hash}\"}",
+                values,
+                "source", "text");
+            Assert.Contains("Hello", body);
+            Assert.Contains("zh-CN", body);
+            Assert.Contains(values["hash"], body);
         }
     }
 }

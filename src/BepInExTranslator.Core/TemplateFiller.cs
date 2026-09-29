@@ -45,16 +45,22 @@ namespace BepInExTranslator.Core
             return result;
         }
 
-        /// <summary>构建翻译请求常用占位符字典。</summary>
+        /// <summary>构建翻译请求常用占位符字典（契约：{source} {targetLanguage} {hash}）。</summary>
         public static Dictionary<string, string> BuildTranslationPlaceholders(
             string text,
             string targetLang,
+            string? hash = null,
             string? sourceLang = null)
         {
+            var computedHash = hash ?? TextHasher.ComputeHash(text);
             return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
-                ["text"] = text ?? string.Empty,
+                // 契约占位符
                 ["source"] = text ?? string.Empty,
+                ["targetLanguage"] = targetLang ?? string.Empty,
+                ["hash"] = computedHash ?? string.Empty,
+                // 兼容别名
+                ["text"] = text ?? string.Empty,
                 ["target_lang"] = targetLang ?? string.Empty,
                 ["targetLang"] = targetLang ?? string.Empty,
                 ["lang"] = targetLang ?? string.Empty,

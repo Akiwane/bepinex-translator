@@ -119,7 +119,7 @@ namespace BepInExTranslator.Services
             {
                 Fonts.TryApplyFont(component);
 
-                if (!Settings.AutoResizeFont.Value)
+                if (!Settings.AutoShrinkFontSize.Value)
                 {
                     return;
                 }

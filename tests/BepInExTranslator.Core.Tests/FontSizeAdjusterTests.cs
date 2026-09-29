@@ -56,5 +56,13 @@ namespace BepInExTranslator.Core.Tests
             var value = JsonPathExtractor.ExtractString(json, "choices[0].message.content");
             Assert.Equal("你好", value);
         }
+
+        [Fact]
+        public void ExtractString_DottedArrayIndex_ContractShape()
+        {
+            var json = "{\"choices\":[{\"message\":{\"content\":\"世界\"}}]}";
+            var value = JsonPathExtractor.ExtractString(json, "choices.0.message.content");
+            Assert.Equal("世界", value);
+        }
     }
 }

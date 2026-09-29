@@ -5,7 +5,7 @@ using BepInEx.Logging;
 
 namespace BepInExTranslator.Services
 {
-    /// <summary>字体解析（反射调用 Unity Font API，无编译期 Unity 引用）。</summary>
+    /// <summary>字体解析（反射）：FontSourceType = Unity | System | CustomFile。</summary>
     public sealed class FontProvider
     {
         private readonly PluginSettings _settings;
@@ -50,36 +50,28 @@ namespace BepInExTranslator.Services
             }
 
             _resolved = true;
-            var source = (_settings.FontSource.Value ?? "Default").Trim();
+            var sourceType = (_settings.FontSourceType.Value ?? "System").Trim();
+            var path = _settings.FontPath.Value ?? string.Empty;
+
             try
             {
-                if (source.Equals("Default", StringComparison.OrdinalIgnoreCase))
+                if (sourceType.Equals("Unity", StringComparison.OrdinalIgnoreCase)
+                    || sourceType.Equals("BuiltIn", StringComparison.OrdinalIgnoreCase))
                 {
-                    return null;
-                }
-
-                if (source.Equals("BuiltIn", StringComparison.OrdinalIgnoreCase))
-                {
+                    var name = string.IsNullOrWhiteSpace(path) ? "Arial.ttf" : Path.GetFileName(path);
                     var fontType = FindType("UnityEngine.Font");
                     if (fontType != null)
                     {
-                        _cached = InvokeStatic(
-                            "UnityEngine.Resources",
-                            "GetBuiltinResource",
-                            fontType,
-                            "Arial.ttf");
+                        _cached = InvokeGetBuiltin(fontType, name);
                     }
                 }
-                else if (source.Equals("System", StringComparison.OrdinalIgnoreCase))
+                else if (sourceType.Equals("System", StringComparison.OrdinalIgnoreCase))
                 {
-                    var name = string.IsNullOrWhiteSpace(_settings.SystemFontName.Value)
-                        ? "Arial"
-                        : _settings.SystemFontName.Value;
+                    var name = string.IsNullOrWhiteSpace(path) ? "Arial" : path;
                     _cached = CallCreateDynamicFont(name);
                 }
-                else if (source.Equals("CustomFile", StringComparison.OrdinalIgnoreCase))
+                else if (sourceType.Equals("CustomFile", StringComparison.OrdinalIgnoreCase))
                 {
-                    var path = _settings.CustomFontPath.Value;
                     if (!string.IsNullOrWhiteSpace(path))
                     {
                         var name = File.Exists(path) ? Path.GetFileNameWithoutExtension(path) : path;
@@ -91,7 +83,7 @@ namespace BepInExTranslator.Services
             }
             catch (Exception ex)
             {
-                _log.LogWarning($"Font resolve failed ({source}): {ex.Message}");
+                _log.LogWarning($"Font resolve failed ({sourceType}): {ex.Message}");
             }
 
             return _cached;
@@ -100,12 +92,7 @@ namespace BepInExTranslator.Services
         private static object? CallCreateDynamicFont(string name)
         {
             var fontType = FindType("UnityEngine.Font");
-            if (fontType == null)
-            {
-                return null;
-            }
-
-            var method = fontType.GetMethod(
+            var method = fontType?.GetMethod(
                 "CreateDynamicFontFromOSFont",
                 BindingFlags.Public | BindingFlags.Static,
                 null,
@@ -114,21 +101,16 @@ namespace BepInExTranslator.Services
             return method?.Invoke(null, new object[] { name, 16 });
         }
 
-        private static object? InvokeStatic(string typeName, string methodName, Type resourceType, string resourceName)
+        private static object? InvokeGetBuiltin(Type fontType, string resourceName)
         {
-            var resources = FindType(typeName);
-            if (resources == null)
-            {
-                return null;
-            }
-
-            var method = resources.GetMethod(
-                methodName,
+            var resources = FindType("UnityEngine.Resources");
+            var method = resources?.GetMethod(
+                "GetBuiltinResource",
                 BindingFlags.Public | BindingFlags.Static,
                 null,
                 new[] { typeof(Type), typeof(string) },
                 null);
-            return method?.Invoke(null, new object[] { resourceType, resourceName });
+            return method?.Invoke(null, new object[] { fontType, resourceName });
         }
 
         private static Type? FindType(string fullName)

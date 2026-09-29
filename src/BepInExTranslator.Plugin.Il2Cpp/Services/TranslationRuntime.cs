@@ -108,7 +108,7 @@ namespace BepInExTranslator.Services
             try
             {
                 Fonts.TryApplyFont(component);
-                if (Settings.AutoResizeFont.Value)
+                if (Settings.AutoShrinkFontSize.Value)
                 {
                     LayoutAdjuster.Apply(component, source, translation, Settings);
                 }

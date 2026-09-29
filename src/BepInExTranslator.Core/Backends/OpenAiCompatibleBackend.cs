@@ -16,7 +16,7 @@ namespace BepInExTranslator.Core.Backends
     {
         private readonly OpenAiCompatibleOptions _options;
 
-        public string Name => "OpenAiCompatible";
+        public string Name => "LlmOpenAiCompatible";
 
         public OpenAiCompatibleBackend(OpenAiCompatibleOptions options)
         {
@@ -37,13 +37,13 @@ namespace BepInExTranslator.Core.Backends
             var placeholders = TemplateFiller.BuildTranslationPlaceholders(source, targetLang);
             var systemPrompt = TemplateFiller.Fill(
                 string.IsNullOrWhiteSpace(_options.SystemPrompt)
-                    ? "You are a translator. Translate the user message into {{target_lang}}. Reply with only the translation, no quotes or explanation."
+                    ? "You are a game UI translator. Translate the user message into {targetLanguage}. Reply with only the translation."
                     : _options.SystemPrompt,
                 placeholders);
 
             var userContent = TemplateFiller.Fill(
                 string.IsNullOrWhiteSpace(_options.UserPromptTemplate)
-                    ? "{{text}}"
+                    ? "{source}"
                     : _options.UserPromptTemplate,
                 placeholders);
 
@@ -124,10 +124,10 @@ namespace BepInExTranslator.Core.Backends
         public int TimeoutMs { get; set; } = 30000;
 
         public string SystemPrompt { get; set; } =
-            "You are a translator. Translate the user message into {{target_lang}}. Reply with only the translation, no quotes or explanation.";
+            "You are a game UI translator. Translate faithfully; keep placeholders and markup intact.";
 
-        public string UserPromptTemplate { get; set; } = "{{text}}";
-        public string ResponseJsonPath { get; set; } = "choices[0].message.content";
+        public string UserPromptTemplate { get; set; } = "{source}";
+        public string ResponseJsonPath { get; set; } = "choices.0.message.content";
         public Dictionary<string, string> ExtraHeaders { get; set; } = new Dictionary<string, string>();
     }
 }
