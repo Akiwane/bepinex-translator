@@ -63,6 +63,7 @@ public static class UiStrings
         InjectorErrorKind.DownloadFailed => "下载失败：请检查网络，或改用本地 zip / artifacts。",
         InjectorErrorKind.ExtractFailed => "解压或写入失败：请检查磁盘空间与路径。",
         InjectorErrorKind.PermissionDenied => "权限不足：请检查文件夹权限或以管理员运行。",
+        InjectorErrorKind.PathConflict => "路径冲突：游戏根下存在同名文件/目录类型不匹配，请删除或重命名后再安装。",
         InjectorErrorKind.Cancelled => "已取消安装。",
         _ => string.Empty,
     };
