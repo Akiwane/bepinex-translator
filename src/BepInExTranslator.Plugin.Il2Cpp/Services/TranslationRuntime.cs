@@ -7,10 +7,15 @@ using BepInExTranslator.Core;
 
 namespace BepInExTranslator.Services
 {
-    /// <summary>IL2CPP 运行时翻译服务（纯反射，无编译期 Unity 引用）。</summary>
+    /// <summary>
+    /// IL2CPP 运行时翻译服务（与 Mono 版 P0/P1 行为对齐，纯反射）。
+    /// </summary>
     public sealed class TranslationRuntime
     {
         private readonly ConcurrentDictionary<int, string> _lastApplied = new();
+        private readonly ConcurrentDictionary<int, string> _expectedSource = new();
+        private readonly ConcurrentDictionary<int, float> _baselineFontSize = new();
+        private readonly ConcurrentDictionary<int, string> _layoutAppliedKey = new();
         private readonly ConcurrentDictionary<int, byte> _mutating = new();
 
         public OnDemandTranslator Translator { get; }
@@ -42,12 +47,24 @@ namespace BepInExTranslator.Services
             }
 
             var id = component.GetHashCode();
+            _expectedSource[id] = originalText!;
+
             var cached = Translator.TryResolveCached(originalText);
             if (cached != null)
             {
-                ApplyPresentation(component, originalText!, cached);
+                if (_lastApplied.TryGetValue(id, out var last) && last == cached)
+                {
+                    return cached;
+                }
+
+                ApplyPresentation(component, originalText!, cached, forceLayout: false);
                 _lastApplied[id] = cached;
                 return cached;
+            }
+
+            if (Translator.IsInCooldown(originalText!))
+            {
+                return originalText!;
             }
 
             _ = TranslateAndApplyAsync(component, originalText!, applyText);
@@ -67,10 +84,19 @@ namespace BepInExTranslator.Services
                 void Apply()
                 {
                     var id = component.GetHashCode();
+                    _expectedSource.TryGetValue(id, out var pendingExpected);
+                    var currentText = TryReadText(component);
+
+                    if (!StaleWriteGuard.ShouldApply(originalText, translated, pendingExpected, currentText))
+                    {
+                        Log.LogDebug("Discard stale async translation apply.");
+                        return;
+                    }
+
                     _mutating[id] = 1;
                     try
                     {
-                        ApplyPresentation(component, originalText, translated);
+                        ApplyPresentation(component, originalText, translated, forceLayout: true);
                         applyText(translated);
                         _lastApplied[id] = translated;
                     }
@@ -86,7 +112,6 @@ namespace BepInExTranslator.Services
                 }
                 else
                 {
-                    // 无主线程泵时仍尝试直接回写；失败则依赖缓存，下次同步命中
                     try
                     {
                         Apply();
@@ -103,15 +128,29 @@ namespace BepInExTranslator.Services
             }
         }
 
-        private void ApplyPresentation(object component, string source, string translation)
+        private void ApplyPresentation(object component, string source, string translation, bool forceLayout)
         {
             try
             {
                 Fonts.TryApplyFont(component);
-                if (Settings.AutoShrinkFontSize.Value)
+                if (!Settings.AutoShrinkFontSize.Value)
                 {
-                    LayoutAdjuster.Apply(component, source, translation, Settings);
+                    return;
                 }
+
+                var id = component.GetHashCode();
+                var layoutKey = source + "\u001f" + translation;
+                if (!forceLayout
+                    && _layoutAppliedKey.TryGetValue(id, out var done)
+                    && done == layoutKey)
+                {
+                    return;
+                }
+
+                var type = component.GetType();
+                var baseline = _baselineFontSize.GetOrAdd(id, _ => LayoutAdjuster.ReadFontSize(component, type));
+                LayoutAdjuster.ApplyFromBaseline(component, type, baseline, source, translation, Settings);
+                _layoutAppliedKey[id] = layoutKey;
             }
             catch (Exception ex)
             {
@@ -119,10 +158,20 @@ namespace BepInExTranslator.Services
             }
         }
 
-        private static bool ShouldSkip(string text)
+        private static string? TryReadText(object component)
         {
-            return text.Trim().Length <= 1;
+            try
+            {
+                var prop = component.GetType().GetProperty("text", BindingFlags.Instance | BindingFlags.Public);
+                return prop?.GetValue(component) as string;
+            }
+            catch
+            {
+                return null;
+            }
         }
+
+        private static bool ShouldSkip(string text) => text.Trim().Length <= 1;
     }
 
     public static class UnityMainThread
@@ -159,11 +208,16 @@ namespace BepInExTranslator.Services
 
     public static class LayoutAdjuster
     {
-        public static void Apply(object component, string source, string translation, PluginSettings settings)
+        public static void ApplyFromBaseline(
+            object component,
+            Type type,
+            float baselineFontSize,
+            string source,
+            string translation,
+            PluginSettings settings)
         {
-            var type = component.GetType();
             var newSize = FontSizeAdjuster.ComputeAdjustedFontSize(
-                ReadFontSize(component, type),
+                baselineFontSize,
                 source,
                 translation,
                 settings.MinFontScale.Value,
@@ -176,7 +230,7 @@ namespace BepInExTranslator.Services
             }
         }
 
-        private static float ReadFontSize(object component, Type type)
+        public static float ReadFontSize(object component, Type type)
         {
             var prop = type.GetProperty("fontSize", BindingFlags.Instance | BindingFlags.Public);
             var value = prop?.GetValue(component);

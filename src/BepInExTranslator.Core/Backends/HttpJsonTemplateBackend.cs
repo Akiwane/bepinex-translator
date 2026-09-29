@@ -42,7 +42,8 @@ namespace BepInExTranslator.Core.Backends
                 placeholders,
                 "text", "source");
 
-            var url = TemplateFiller.Fill(_options.Url, placeholders);
+            // URL / query / path：占位符值 EscapeDataString，防止注入与破环
+            var url = HttpRequestHardening.FillUrl(_options.Url, placeholders);
             var method = string.IsNullOrWhiteSpace(_options.Method) ? "POST" : _options.Method.Trim().ToUpperInvariant();
 
             var request = (HttpWebRequest)WebRequest.Create(url);
@@ -53,24 +54,24 @@ namespace BepInExTranslator.Core.Backends
                 ? "application/json; charset=utf-8"
                 : _options.ContentType;
 
-            // 应用可配置请求头（值也可含占位符）
+            // 应用可配置请求头：先填充占位符，再消毒（去 CR/LF、限长）
             if (_options.Headers != null)
             {
                 foreach (var header in _options.Headers)
                 {
-                    if (string.IsNullOrWhiteSpace(header.Key))
+                    var filledValue = TemplateFiller.Fill(header.Value, placeholders);
+                    if (!HttpRequestHardening.TrySanitizeHeader(header.Key, filledValue, out var safeName, out var safeValue))
                     {
                         continue;
                     }
 
-                    var headerValue = TemplateFiller.Fill(header.Value, placeholders);
-                    if (string.Equals(header.Key, "Content-Type", StringComparison.OrdinalIgnoreCase))
+                    if (string.Equals(safeName, "Content-Type", StringComparison.OrdinalIgnoreCase))
                     {
-                        request.ContentType = headerValue;
+                        request.ContentType = safeValue;
                         continue;
                     }
 
-                    request.Headers[header.Key] = headerValue;
+                    request.Headers[safeName] = safeValue;
                 }
             }
 

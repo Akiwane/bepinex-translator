@@ -66,25 +66,28 @@ namespace BepInExTranslator.Core.Backends
 
             if (!string.IsNullOrWhiteSpace(_options.ApiKey))
             {
-                request.Headers["Authorization"] = "Bearer " + _options.ApiKey;
+                if (HttpRequestHardening.TrySanitizeHeader("Authorization", "Bearer " + _options.ApiKey, out var authName, out var authValue))
+                {
+                    request.Headers[authName] = authValue;
+                }
             }
 
             if (_options.ExtraHeaders != null)
             {
                 foreach (var header in _options.ExtraHeaders)
                 {
-                    if (string.IsNullOrWhiteSpace(header.Key))
+                    if (!HttpRequestHardening.TrySanitizeHeader(header.Key, header.Value, out var safeName, out var safeValue))
                     {
                         continue;
                     }
 
-                    if (string.Equals(header.Key, "Content-Type", StringComparison.OrdinalIgnoreCase))
+                    if (string.Equals(safeName, "Content-Type", StringComparison.OrdinalIgnoreCase))
                     {
-                        request.ContentType = header.Value;
+                        request.ContentType = safeValue;
                         continue;
                     }
 
-                    request.Headers[header.Key] = header.Value;
+                    request.Headers[safeName] = safeValue;
                 }
             }
 
