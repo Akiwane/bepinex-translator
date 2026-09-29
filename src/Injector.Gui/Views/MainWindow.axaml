@@ -1,0 +1,129 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:Injector.Gui.ViewModels"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d"
+        x:Class="Injector.Gui.Views.MainWindow"
+        x:DataType="vm:MainWindowViewModel"
+        Title="{Binding Title}"
+        Width="760"
+        Height="620"
+        MinWidth="580"
+        MinHeight="520"
+        WindowStartupLocation="CenterScreen">
+
+  <Grid Margin="24" RowDefinitions="Auto,Auto,*,Auto,Auto">
+
+    <!-- 选择游戏 -->
+    <StackPanel Grid.Row="0" Spacing="8">
+      <TextBlock Text="{Binding SelectGameLabel}" FontSize="18" FontWeight="SemiBold" />
+      <DockPanel LastChildFill="True">
+        <Button DockPanel.Dock="Right"
+                Margin="8,0,0,0"
+                Content="探测"
+                Command="{Binding ProbePathCommand}"
+                IsEnabled="{Binding !IsBusy}" />
+        <Button DockPanel.Dock="Right"
+                Margin="8,0,0,0"
+                Content="{Binding BrowseExeLabel}"
+                Command="{Binding BrowseExeCommand}"
+                IsEnabled="{Binding !IsBusy}" />
+        <Button DockPanel.Dock="Right"
+                Margin="8,0,0,0"
+                Content="{Binding BrowseFolderLabel}"
+                Command="{Binding BrowseFolderCommand}"
+                IsEnabled="{Binding !IsBusy}" />
+        <TextBox Watermark="{Binding PathPlaceholder}"
+                 Text="{Binding GamePath}"
+                 IsEnabled="{Binding !IsBusy}" />
+      </DockPanel>
+    </StackPanel>
+
+    <!-- 探测结果 -->
+    <Border Grid.Row="1"
+            Margin="0,16,0,0"
+            Padding="16"
+            CornerRadius="8"
+            Background="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}"
+            BorderBrush="{DynamicResource SystemControlForegroundBaseMediumBrush}"
+            BorderThickness="1">
+      <StackPanel Spacing="10">
+        <TextBlock Text="{Binding ProbeResultsLabel}" FontSize="16" FontWeight="SemiBold" />
+        <Grid ColumnDefinitions="100,*">
+          <StackPanel Grid.Column="0" Spacing="8">
+            <TextBlock Text="{Binding UnityVersionLabel}" Opacity="0.75" />
+            <TextBlock Text="{Binding RuntimeLabel}" Opacity="0.75" />
+            <TextBlock Text="{Binding EvidenceLabel}" Opacity="0.75" />
+            <TextBlock Text="{Binding NotesLabel}" Opacity="0.75" />
+          </StackPanel>
+          <StackPanel Grid.Column="1" Spacing="8">
+            <TextBlock Text="{Binding UnityVersionText}" TextWrapping="Wrap" />
+            <TextBlock Text="{Binding RuntimeText}" FontWeight="SemiBold" TextWrapping="Wrap" />
+            <TextBlock Text="{Binding EvidenceText}" TextWrapping="Wrap" Opacity="0.9" />
+            <TextBlock Text="{Binding NotesText}" TextWrapping="Wrap" Opacity="0.8" FontSize="12" />
+          </StackPanel>
+        </Grid>
+      </StackPanel>
+    </Border>
+
+    <!-- 横幅 + 安装 -->
+    <StackPanel Grid.Row="2" Margin="0,16,0,0" Spacing="12" VerticalAlignment="Top">
+      <Border Padding="12,10" CornerRadius="6"
+              Background="#33C0392B" BorderBrush="#88C0392B" BorderThickness="1"
+              IsVisible="{Binding IsErrorBanner}">
+        <TextBlock Text="{Binding BannerText}" TextWrapping="Wrap" />
+      </Border>
+      <Border Padding="12,10" CornerRadius="6"
+              Background="#33F39C12" BorderBrush="#88F39C12" BorderThickness="1"
+              IsVisible="{Binding IsWarningBanner}">
+        <TextBlock Text="{Binding BannerText}" TextWrapping="Wrap" />
+      </Border>
+      <Border Padding="12,10" CornerRadius="6"
+              Background="#3327AE60" BorderBrush="#8827AE60" BorderThickness="1"
+              IsVisible="{Binding IsSuccessBanner}">
+        <TextBlock Text="{Binding BannerText}" TextWrapping="Wrap" />
+      </Border>
+
+      <StackPanel Orientation="Horizontal" Spacing="12">
+        <TextBlock Text="{Binding OverwritePolicyLabel}"
+                   VerticalAlignment="Center"
+                   Opacity="0.8" />
+        <ComboBox Width="220"
+                  ItemsSource="{Binding OverwritePolicies}"
+                  SelectedItem="{Binding SelectedOverwriteItem}"
+                  IsEnabled="{Binding !IsBusy}">
+          <ComboBox.ItemTemplate>
+            <DataTemplate x:DataType="vm:OverwritePolicyItem">
+              <TextBlock Text="{Binding DisplayName}" />
+            </DataTemplate>
+          </ComboBox.ItemTemplate>
+        </ComboBox>
+        <Button Content="{Binding InstallButtonLabel}"
+                Command="{Binding InstallCommand}"
+                Classes="accent"
+                MinWidth="140"
+                FontWeight="SemiBold" />
+      </StackPanel>
+
+      <TextBlock Text="{Binding ProbeHint}" Opacity="0.65" TextWrapping="Wrap" FontSize="12" />
+      <TextBlock Text="{Binding PinNote}" Opacity="0.55" TextWrapping="Wrap" FontSize="11" />
+    </StackPanel>
+
+    <!-- 进度 -->
+    <StackPanel Grid.Row="3" Margin="0,12,0,0" Spacing="6">
+      <ProgressBar Minimum="0"
+                   Maximum="100"
+                   Value="{Binding ProgressValue}"
+                   IsIndeterminate="{Binding ProgressIsIndeterminate}"
+                   Height="8" />
+      <TextBlock Text="{Binding StatusText}" Opacity="0.85" TextWrapping="Wrap" />
+    </StackPanel>
+
+    <TextBlock Grid.Row="4"
+               Margin="0,12,0,0"
+               FontSize="11"
+               Opacity="0.5"
+               Text="v1.1 Windows · Gui on Injector.Core (PR #7 GameDetector / PackageResolver / GameInstaller)" />
+  </Grid>
+</Window>

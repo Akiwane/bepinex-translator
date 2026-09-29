@@ -32,7 +32,19 @@ v1.0 **无**游戏内/桌面配置 UI，仅使用 BepInEx ConfigFile + JSON 翻�
 
 ## 安装到游戏
 
-### 1. 确认游戏后端
+### 推荐：Windows 注入器（v1.1 / REQUIREMENTS §7）
+
+`Injector.Core`（PR #7）识别 Mono/IL2CPP、下载匹配 BepInEx，并将本模组放入 `BepInEx/plugins`。`Injector.Gui`（本 PR）为 **完整 Avalonia UI**，绑定上述 Core。契约、默认包 pin、验收步骤见 **[`docs/injector.md`](./docs/injector.md)**。
+
+```bash
+dotnet build src/Injector.Core/Injector.Core.csproj -c Release
+dotnet build src/Injector.Gui/Injector.Gui.csproj -c Release
+dotnet run --project src/Injector.Gui
+```
+
+合并时：以 #7 Core 为准；丢弃 #7 的占位 Gui stub。
+
+### 1. 确认游戏后端（手动安装时）
 
 - 存在 `*_Data/Managed` 且无 `il2cpp_data` → **Mono** → **BepInEx 5.x**
 - 存在 `il2cpp_data` / `GameAssembly.dll` → **IL2CPP** → **BepInEx 6.x Unity IL2CPP**
@@ -150,7 +162,10 @@ FontPath = Microsoft YaHei
 dotnet test BepInExTranslator.sln
 dotnet build src/BepInExTranslator.Plugin/BepInExTranslator.Plugin.csproj -c Release
 dotnet build src/BepInExTranslator.Plugin.Il2Cpp/BepInExTranslator.Plugin.Il2Cpp.csproj -c Release
+dotnet build src/Injector.Gui/Injector.Gui.csproj -c Release
 ```
+
+注入器说明：[`docs/injector.md`](./docs/injector.md)。
 
 ## 许可证与安全
 
