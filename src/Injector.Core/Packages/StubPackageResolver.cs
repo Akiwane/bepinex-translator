@@ -9,19 +9,22 @@ namespace Injector.Core.Packages;
 /// </summary>
 public sealed class StubPackageResolver : IPackageResolver
 {
-    // Placeholder URLs — documented for backend. Stub installer does NOT download these by default.
-    // Real releases: https://github.com/BepInEx/BepInEx/releases
+    // Placeholder URLs for docs/demo only — StubInstaller never downloads these.
+    // Backend defaults (no secrets): BepInEx official GitHub Releases
+    //   Mono → 5.x Win x64; IL2CPP → 6.x Unity IL2CPP Win (pin a stable tag in real resolver).
+    // Plugin package: prefer local artifacts/mono|il2cpp, else configurable Release asset / local zip.
     public const string PlaceholderBepInEx5Url =
         "https://github.com/BepInEx/BepInEx/releases/download/v5.4.23.2/BepInEx_win_x64_5.4.23.2.zip";
 
     public const string PlaceholderBepInEx6Il2CppUrl =
         "https://github.com/BepInEx/BepInEx/releases/download/v6.0.0-be.735/BepInEx-Unity.IL2CPP-win-x64-6.0.0-be.735%2B501bbea.zip";
 
+    // example.invalid — not fetched by stub; backend should point at artifacts/ or a Release asset.
     public const string PlaceholderPluginMonoUrl =
-        "https://example.invalid/bepinex-translator/artifacts/mono/BepInExTranslator-mono.zip";
+        "file:///artifacts/mono/BepInExTranslator-mono.zip";
 
     public const string PlaceholderPluginIl2CppUrl =
-        "https://example.invalid/bepinex-translator/artifacts/il2cpp/BepInExTranslator-il2cpp.zip";
+        "file:///artifacts/il2cpp/BepInExTranslator-il2cpp.zip";
 
     public PackageIds? Resolve(RuntimeKind runtime) => runtime switch
     {
