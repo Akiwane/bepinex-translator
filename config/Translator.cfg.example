@@ -1,0 +1,93 @@
+## BepInEx Translator — example config / 示例配置
+## Copy to BepInEx/config/ (or the mod directory) and rename without ".example".
+## 复制到 BepInEx/config/（或模组目录），去掉 ".example" 后缀后使用。
+## Field names below are the contract for the plugin backend.
+## 以下字段名为插件后端实现契约，请勿随意改名。
+## Secrets: replace placeholders only in your local copy — never commit real keys.
+## 密钥：仅在本地副本中替换占位符，切勿将真实密钥提交进仓库。
+
+[General]
+## Target language BCP-47 / IETF tag. Default: zh-CN
+## 目标语言标签。默认：zh-CN
+TargetLanguage = zh-CN
+
+## Translation product JSON path (absolute, or relative to game / BepInEx root).
+## 翻译产物 JSON 路径（绝对路径，或相对游戏根目录 / BepInEx 根目录）。
+## See docs/translations.example.json for the entry schema.
+## 条目结构见 docs/translations.example.json。
+ProductJsonPath = BepInEx/plugins/Translator/translations.json
+
+## Request timeout in milliseconds for HTTP / LLM backends.
+## HTTP / LLM 后端请求超时（毫秒）。
+TimeoutMs = 15000
+
+## Backend type: HttpTemplate | LlmOpenAiCompatible
+## 后端类型：HttpTemplate（通用 HTTP JSON 模板）| LlmOpenAiCompatible（OpenAI 兼容 Chat Completions）
+BackendType = HttpTemplate
+
+[HttpTemplate]
+## Only used when BackendType = HttpTemplate
+## 仅当 BackendType = HttpTemplate 时生效
+
+## Full request URL. Placeholders: {source}, {targetLanguage}, {hash}
+## 完整请求 URL。占位符：{source}、{targetLanguage}、{hash}
+EndpointUrl = https://example.com/api/translate
+
+## Extra HTTP headers as JSON object. Placeholders allowed in values.
+## Use YOUR_API_KEY locally; do not commit real secrets.
+## 额外 HTTP 头（JSON 对象）。值中可使用占位符。本地填入密钥，勿提交真实密钥。
+HeadersJson = {"Authorization":"Bearer YOUR_API_KEY","Content-Type":"application/json"}
+
+## Request body template (JSON string). Placeholders: {source}, {targetLanguage}, {hash}
+## 请求体模板（JSON 字符串）。占位符：{source}、{targetLanguage}、{hash}
+BodyTemplate = {"q":"{source}","target":"{targetLanguage}","id":"{hash}"}
+
+## JSON path to the translated string in the response, e.g. data.translation or choices.0.message.content
+## 响应中译文的 JSON 路径，例如 data.translation
+ResponseTranslationPath = data.translation
+
+[LlmOpenAiCompatible]
+## Only used when BackendType = LlmOpenAiCompatible
+## 仅当 BackendType = LlmOpenAiCompatible 时生效
+
+## OpenAI-compatible API base URL (no trailing path required beyond /v1 if your host needs it).
+## OpenAI 兼容 API 的 Base URL（按服务商要求，可含 /v1）。
+BaseUrl = https://api.openai.com/v1
+
+## Model id, e.g. gpt-4o-mini
+## 模型 ID，例如 gpt-4o-mini
+Model = gpt-4o-mini
+
+## API key placeholder — set in local config only.
+## API 密钥占位符 — 仅在本地配置中填写真实值。
+ApiKey = YOUR_API_KEY
+
+## Optional system prompt for translation.
+## 可选系统提示词，约束翻译行为。
+SystemPrompt = You are a game UI translator. Translate faithfully; keep placeholders and markup intact.
+
+## Chat Completions path relative to BaseUrl (default: /chat/completions).
+## 相对 BaseUrl 的 Chat Completions 路径（默认：/chat/completions）。
+ChatCompletionsPath = /chat/completions
+
+[Layout]
+## When true, shrink font size for long translations that would overflow the UI container.
+## 为 true 时：长译文在容器内自动缩小字号，减轻截断。
+AutoShrinkFontSize = true
+
+[Font]
+## Font source type: Unity | System | CustomFile
+## 字体来源类型：Unity（内置/资源引用）| System（系统字体）| CustomFile（自定义字体文件）
+## See docs/fonts.md for concrete path examples.
+## 具体路径示例见 docs/fonts.md。
+FontSourceType = System
+
+## Path or name depending on FontSourceType:
+## - Unity: asset / Font name reference, e.g. Arial.ttf or Assets/Fonts/GameFont
+## - System: OS font family or file name, e.g. Microsoft YaHei / Noto Sans CJK SC
+## - CustomFile: path relative to game or BepInEx root, e.g. BepInEx/plugins/Translator/fonts/NotoSansSC-Regular.otf
+## 含义随 FontSourceType 变化：
+## - Unity：资源或 Font 名称引用
+## - System：系统字体族名或文件名
+## - CustomFile：相对游戏 / BepInEx 根目录的字体文件路径
+FontPath = Microsoft YaHei
