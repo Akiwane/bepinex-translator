@@ -39,8 +39,8 @@ dotnet test BepInExTranslator.sln -c Release
 详见 [`docs/injector.md`](docs/injector.md)。**Core** 为可测安装逻辑；**Gui** 为 Avalonia stub（完整 UI 归前端）。
 
 ```bash
-dotnet build src/Injector.Core/BepInExTranslator.Injector.Core.csproj -c Release
-dotnet build src/Injector.Gui/BepInExTranslator.Injector.Gui.csproj -c Release
+dotnet build src/Injector.Core/Injector.Core.csproj -c Release
+dotnet build src/Injector.Gui/Injector.Gui.csproj -c Release
 ```
 
 默认 BepInEx pin：Mono → `5.4.23.5` win-x64；IL2CPP → `6.0.0-pre.2` Unity.IL2CPP win-x64。模组默认取自 `artifacts/mono|il2cpp`。

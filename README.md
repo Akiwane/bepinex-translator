@@ -159,7 +159,7 @@ FontPath = Microsoft YaHei
 dotnet test BepInExTranslator.sln
 dotnet build src/BepInExTranslator.Plugin/BepInExTranslator.Plugin.csproj -c Release
 dotnet build src/BepInExTranslator.Plugin.Il2Cpp/BepInExTranslator.Plugin.Il2Cpp.csproj -c Release
-dotnet build src/Injector.Gui/BepInExTranslator.Injector.Gui.csproj -c Release
+dotnet build src/Injector.Gui/Injector.Gui.csproj -c Release
 ```
 
 注入器说明：[`docs/injector.md`](./docs/injector.md)。
