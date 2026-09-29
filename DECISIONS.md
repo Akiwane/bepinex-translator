@@ -23,3 +23,4 @@
 | 2026-09-29 | 注入器：Avalonia + Injector.Core 分离；BepInEx 5.4.23.5 (Mono) / 6.0.0-pre.2 IL2CPP win-x64 pin | 实现 v1.1 §7 |
 | 2026-09-29 | 模组包默认优先本地 artifacts/mono\|il2cpp，其次可配 zip/URL/Release tag | 实现 v1.1 §7 |
 | 2026-09-29 | Core 契约：IGameProbe / IPackageResolver / IInstaller + InjectorError；完整 Avalonia Gui 绑定该契约（PR #6 on #7 Core） | 与前端分工 |
+| 2026-09-29 | 注入器 PR #6 合入 main（含 P0/P1 修复） | 审查+测试 Pass，用户批准 |
