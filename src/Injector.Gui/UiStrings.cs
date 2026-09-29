@@ -30,6 +30,15 @@ public static class UiStrings
     public const string ProbeHint =
         "探测通过后可安装。BepInEx 默认 pin：Mono 5.4.23.5 / IL2CPP 6.0.0-pre.2；模组优先 artifacts/。";
 
+    /// <summary>IL2CPP 包来源（高级）：仅影响 IL2CPP 安装路径；Mono 仍用默认 pin。</summary>
+    public const string Il2CppPackageSourceLabel = "IL2CPP 包来源（高级）";
+    public const string Il2CppUseDefaultPin = "使用默认 pin（6.0.0-pre.2）";
+    public const string Il2CppUseCustomUrl = "自定义 URL";
+    public const string Il2CppCustomUrlPlaceholder =
+        "例如 https://builds.bepinex.dev/…/BepInEx-Unity.IL2CPP-win-x64-….zip";
+    public const string Il2CppCustomUrlHint =
+        "仅 IL2CPP 生效；须 HTTPS，主机在允许列表（含 builds.bepinex.dev）。留空或选默认 pin 则不覆盖。";
+
     public static string FormatError(InjectorError? error)
     {
         if (error is null)

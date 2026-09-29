@@ -8,9 +8,9 @@
         x:DataType="vm:MainWindowViewModel"
         Title="{Binding Title}"
         Width="760"
-        Height="620"
+        Height="700"
         MinWidth="580"
-        MinHeight="520"
+        MinHeight="560"
         WindowStartupLocation="CenterScreen">
 
   <Grid Margin="24" RowDefinitions="Auto,Auto,*,Auto,Auto">
@@ -104,6 +104,31 @@
                 Classes="accent"
                 MinWidth="140"
                 FontWeight="SemiBold" />
+      </StackPanel>
+
+      <!-- IL2CPP 包来源：始终可见但次要；默认 pin 不写覆盖，自定义 URL → BepInExIl2CppUrl -->
+      <StackPanel Spacing="6" Opacity="0.9">
+        <TextBlock Text="{Binding Il2CppPackageSourceLabel}"
+                   Opacity="0.75"
+                   FontSize="12" />
+        <StackPanel Orientation="Horizontal" Spacing="16">
+          <RadioButton GroupName="Il2CppPackageSource"
+                       Content="{Binding Il2CppUseDefaultPinLabel}"
+                       IsChecked="{Binding UseDefaultIl2CppPin}"
+                       IsEnabled="{Binding !IsBusy}" />
+          <RadioButton GroupName="Il2CppPackageSource"
+                       Content="{Binding Il2CppUseCustomUrlLabel}"
+                       IsChecked="{Binding UseCustomIl2CppUrl}"
+                       IsEnabled="{Binding !IsBusy}" />
+        </StackPanel>
+        <TextBox Watermark="{Binding Il2CppCustomUrlPlaceholder}"
+                 Text="{Binding CustomIl2CppUrl}"
+                 IsEnabled="{Binding IsCustomIl2CppUrlEnabled}"
+                 FontSize="12" />
+        <TextBlock Text="{Binding Il2CppCustomUrlHint}"
+                   Opacity="0.55"
+                   TextWrapping="Wrap"
+                   FontSize="11" />
       </StackPanel>
 
       <TextBlock Text="{Binding ProbeHint}" Opacity="0.65" TextWrapping="Wrap" FontSize="12" />
