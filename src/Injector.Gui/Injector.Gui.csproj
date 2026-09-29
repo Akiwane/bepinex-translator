@@ -12,8 +12,8 @@
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
     <ApplicationTitle>BepInEx Translator 注入器</ApplicationTitle>
     <Description>
-      Avalonia GUI for Windows injector (REQUIREMENTS §7).
-      Uses real Injector.Core from backend PR #7 (GameDetector / PackageResolver / GameInstaller).
+      Avalonia GUI for Windows injector.
+      Uses Injector.Core (GameDetector / PackageResolver / GameInstaller).
       Product runtime is Windows-only; TFM stays net8.0 so Linux CI can build.
     </Description>
   </PropertyGroup>

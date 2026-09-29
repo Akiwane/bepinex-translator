@@ -225,7 +225,7 @@ public sealed class GameInstaller : IInstaller
             catch (HttpRequestException ex)
             {
                 var err = InjectorError.DownloadFailed(
-                    "下载翻译模组失败。若 GitHub Release 尚未发布对应资产，请先构建 artifacts/mono 或 artifacts/il2cpp，或设置本地 TranslatorLocalZipPath。详见 docs/injector.md。",
+                    "下载翻译模组失败。若 GitHub Release 尚未发布对应资产，请先构建 artifacts/mono 或 artifacts/il2cpp，或设置本地 TranslatorLocalZipPath。",
                     ex.Message);
                 Report(err.Message, InstallPhase.Download);
                 return Fail(messages, err, copied, backupDir);

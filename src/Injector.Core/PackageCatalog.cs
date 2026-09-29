@@ -10,7 +10,7 @@ public static class PackageCatalog
 
     /// <summary>
     /// IL2CPP 游戏默认 BepInEx 6 GitHub pre-release（Windows x64 Unity IL2CPP）。
-    /// 官方 Releases 可稳定 pin 的 zip；插件 NuGet 另用 6.0.0-be.733 —— 见 docs/injector.md。
+    /// 官方 Releases 可稳定 pin 的 zip；插件 NuGet 另用 6.0.0-be.733。
     /// </summary>
     public const string BepInEx6Version = "6.0.0-pre.2";
 
