@@ -442,6 +442,173 @@ public sealed class ZipSlipTests
     }
 }
 
+/// <summary>
+/// 复现：已有 BepInEx 目录 + zip 条目「BepInEx」（无尾斜杠）不应 UnauthorizedAccess；
+/// 以及 0 字节文件占住 BepInEx 时应返回 PathConflict 而非 PermissionDenied。
+/// </summary>
+public sealed class BepInExPathConflictExtractTests
+{
+    [Fact]
+    public void ExtractZipToGameRoot_ExistingBepInExDirectory_SkipsFileStyleDirectoryMarker()
+    {
+        var work = Path.Combine(Path.GetTempPath(), "bepinex-dir-marker-" + Guid.NewGuid().ToString("N"));
+        var gameRoot = Path.Combine(work, "game");
+        Directory.CreateDirectory(Path.Combine(gameRoot, "BepInEx"));
+        var zipPath = Path.Combine(work, "bepinex.zip");
+        try
+        {
+            // 无尾斜杠的目录标记 + 真实文件条目
+            CreateZipWithEntries(
+                zipPath,
+                ("BepInEx", ""),
+                ("BepInEx/core/BepInEx.dll", "dll"),
+                ("winhttp.dll", "dll"));
+
+            var copied = new List<string>();
+            var err = GameInstaller.ExtractZipToGameRoot(
+                zipPath,
+                gameRoot,
+                OverwritePolicy.Overwrite,
+                backupDir: null,
+                copied,
+                _ => { });
+
+            Assert.Null(err);
+            Assert.True(Directory.Exists(Path.Combine(gameRoot, "BepInEx")));
+            Assert.False(File.Exists(Path.Combine(gameRoot, "BepInEx"))); // 不得写成文件
+            Assert.True(File.Exists(Path.Combine(gameRoot, "BepInEx", "core", "BepInEx.dll")));
+            Assert.True(File.Exists(Path.Combine(gameRoot, "winhttp.dll")));
+            Assert.Contains(copied, p => p.EndsWith("BepInEx.dll", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            if (Directory.Exists(work))
+            {
+                Directory.Delete(work, true);
+            }
+        }
+    }
+
+    [Fact]
+    public void ExtractZipToGameRoot_ZeroByteBepInExFile_ReturnsPathConflictNotPermissionDenied()
+    {
+        var work = Path.Combine(Path.GetTempPath(), "bepinex-file-clash-" + Guid.NewGuid().ToString("N"));
+        var gameRoot = Path.Combine(work, "game");
+        Directory.CreateDirectory(gameRoot);
+        // 0 字节文件占住本应为目录的 BepInEx
+        File.WriteAllBytes(Path.Combine(gameRoot, "BepInEx"), Array.Empty<byte>());
+        var zipPath = Path.Combine(work, "bepinex.zip");
+        try
+        {
+            CreateZipWithEntries(
+                zipPath,
+                ("BepInEx", ""),
+                ("BepInEx/core/BepInEx.dll", "dll"));
+
+            var copied = new List<string>();
+            var err = GameInstaller.ExtractZipToGameRoot(
+                zipPath,
+                gameRoot,
+                OverwritePolicy.Overwrite,
+                backupDir: null,
+                copied,
+                _ => { });
+
+            Assert.NotNull(err);
+            Assert.Equal(InjectorErrorKind.PathConflict, err!.Kind);
+            Assert.NotEqual(InjectorErrorKind.PermissionDenied, err.Kind);
+            Assert.Contains("文件", err.Message, StringComparison.Ordinal);
+            Assert.Contains("BepInEx", err.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Empty(copied);
+        }
+        finally
+        {
+            if (Directory.Exists(work))
+            {
+                Directory.Delete(work, true);
+            }
+        }
+    }
+
+    [Fact]
+    public void ProbeTopLevelLayoutConflicts_DetectsBepInExFile()
+    {
+        var work = Path.Combine(Path.GetTempPath(), "bepinex-probe-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(work);
+        File.WriteAllText(Path.Combine(work, "BepInEx"), "");
+        try
+        {
+            var err = GameInstaller.ProbeTopLevelLayoutConflicts(work);
+            Assert.NotNull(err);
+            Assert.Equal(InjectorErrorKind.PathConflict, err!.Kind);
+        }
+        finally
+        {
+            Directory.Delete(work, true);
+        }
+    }
+
+    [Fact]
+    public void ProbeTopLevelLayoutConflicts_AllowsExistingBepInExDirectory()
+    {
+        var work = Path.Combine(Path.GetTempPath(), "bepinex-probe-ok-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(work, "BepInEx"));
+        try
+        {
+            Assert.Null(GameInstaller.ProbeTopLevelLayoutConflicts(work));
+        }
+        finally
+        {
+            Directory.Delete(work, true);
+        }
+    }
+
+    [Fact]
+    public void ExtractZipToGameRoot_WinhttpDirectoryClash_ReturnsPathConflict()
+    {
+        var work = Path.Combine(Path.GetTempPath(), "bepinex-winhttp-dir-" + Guid.NewGuid().ToString("N"));
+        var gameRoot = Path.Combine(work, "game");
+        Directory.CreateDirectory(Path.Combine(gameRoot, "winhttp.dll"));
+        var zipPath = Path.Combine(work, "bepinex.zip");
+        try
+        {
+            CreateZipWithEntries(zipPath, ("winhttp.dll", "dll"));
+            var copied = new List<string>();
+            var err = GameInstaller.ExtractZipToGameRoot(
+                zipPath,
+                gameRoot,
+                OverwritePolicy.Overwrite,
+                null,
+                copied,
+                _ => { });
+
+            Assert.NotNull(err);
+            Assert.Equal(InjectorErrorKind.PathConflict, err!.Kind);
+            Assert.Empty(copied);
+        }
+        finally
+        {
+            if (Directory.Exists(work))
+            {
+                Directory.Delete(work, true);
+            }
+        }
+    }
+
+    private static void CreateZipWithEntries(string zipPath, params (string Name, string Content)[] entries)
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(zipPath)!);
+        using var fs = File.Create(zipPath);
+        using var zip = new ZipArchive(fs, ZipArchiveMode.Create);
+        foreach (var (name, content) in entries)
+        {
+            var e = zip.CreateEntry(name);
+            using var w = new StreamWriter(e.Open());
+            w.Write(content);
+        }
+    }
+}
+
 public sealed class DownloadUrlTrustTests
 {
     [Theory]

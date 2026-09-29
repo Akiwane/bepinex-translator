@@ -379,14 +379,16 @@ public sealed class GameInstaller : IInstaller
         List<string> copied,
         Action<string> report)
     {
+        // —— 先探测顶层布局路径冲突（如 0 字节文件占住 BepInEx 目录名）——
+        var probeErr = ProbeTopLevelLayoutConflicts(gameRoot);
+        if (probeErr != null)
+        {
+            return probeErr;
+        }
+
         using var archive = ZipFile.OpenRead(zipPath);
         foreach (var entry in archive.Entries)
         {
-            if (string.IsNullOrEmpty(entry.Name) && entry.FullName.EndsWith('/'))
-            {
-                // 目录条目仍需做路径安全检查
-            }
-
             var relative = BepInExLayoutPlanner.NormalizeZipEntry(entry.FullName);
             if (relative is null)
             {
@@ -395,9 +397,18 @@ public sealed class GameInstaller : IInstaller
                     entry.FullName);
             }
 
-            if (string.IsNullOrEmpty(relative) || relative.EndsWith('/'))
+            // —— 显式目录条目（尾斜杠）或无尾斜杠的目录标记 ——
+            if (string.IsNullOrEmpty(relative)
+                || relative.EndsWith('/')
+                || IsDirectoryMarkerEntry(entry, relative))
             {
-                var dir = Path.Combine(gameRoot, relative.TrimEnd('/').Replace('/', Path.DirectorySeparatorChar));
+                var dirRel = relative.TrimEnd('/');
+                if (string.IsNullOrEmpty(dirRel))
+                {
+                    continue;
+                }
+
+                var dir = Path.Combine(gameRoot, dirRel.Replace('/', Path.DirectorySeparatorChar));
                 if (!BepInExLayoutPlanner.IsStrictlyUnderDestination(gameRoot, dir))
                 {
                     return InjectorError.InvalidPath(
@@ -405,7 +416,12 @@ public sealed class GameInstaller : IInstaller
                         entry.FullName);
                 }
 
-                Directory.CreateDirectory(dir);
+                var dirErr = EnsureDirectoryForExtract(dir);
+                if (dirErr != null)
+                {
+                    return dirErr;
+                }
+
                 continue;
             }
 
@@ -417,10 +433,138 @@ public sealed class GameInstaller : IInstaller
                     entry.FullName);
             }
 
-            Directory.CreateDirectory(Path.GetDirectoryName(dest)!);
-            ExtractEntryWithPolicy(entry, dest, policy, backupDir, copied, report);
+            // —— 目标已是目录：勿 ExtractToFile（否则 UnauthorizedAccessException → 误报权限不足）——
+            if (Directory.Exists(dest))
+            {
+                report($"跳过目录标记条目（目标已是目录）：{relative}");
+                continue;
+            }
+
+            var parent = Path.GetDirectoryName(dest);
+            if (!string.IsNullOrEmpty(parent))
+            {
+                var parentErr = EnsureDirectoryForExtract(parent);
+                if (parentErr != null)
+                {
+                    return parentErr;
+                }
+            }
+
+            var extractErr = ExtractEntryWithPolicy(entry, dest, policy, backupDir, copied, report);
+            if (extractErr != null)
+            {
+                return extractErr;
+            }
         }
 
+        return null;
+    }
+
+    /// <summary>
+    /// 安装前/解压前探测游戏根顶层布局冲突：必须为目录的路径被文件占用，或必须为文件的路径被目录占用。
+    /// </summary>
+    internal static InjectorError? ProbeTopLevelLayoutConflicts(string gameRoot)
+    {
+        foreach (var name in KnownLayoutDirectoryNames)
+        {
+            var path = Path.Combine(gameRoot, name);
+            if (File.Exists(path))
+            {
+                return InjectorError.PathConflict(
+                    $"游戏根目录下已存在名为「{name}」的文件，无法创建同名 BepInEx/布局目录。"
+                    + "请先删除或重命名该文件后再安装（这不是权限问题）。",
+                    path);
+            }
+        }
+
+        foreach (var name in KnownLayoutFileNames)
+        {
+            var path = Path.Combine(gameRoot, name);
+            if (Directory.Exists(path))
+            {
+                return InjectorError.PathConflict(
+                    $"游戏根目录下「{name}」已是目录，但安装需要同名文件。"
+                    + "请先删除或重命名该目录后再安装（这不是权限问题）。",
+                    path);
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>BepInEx / doorstop 布局中应为目录的顶层名。</summary>
+    private static readonly string[] KnownLayoutDirectoryNames = { "BepInEx", "dotnet" };
+
+    /// <summary>BepInEx / doorstop 布局中应为文件的顶层名。</summary>
+    private static readonly string[] KnownLayoutFileNames =
+    {
+        "winhttp.dll",
+        "doorstop_config.ini",
+        ".doorstop_version",
+        "changelog.txt",
+    };
+
+    /// <summary>
+    /// 无尾斜杠但仍应视为目录标记的 zip 条目（常见于部分打包工具写出的 <c>BepInEx</c>）。
+    /// </summary>
+    internal static bool IsDirectoryMarkerEntry(ZipArchiveEntry entry, string normalizedRelative)
+    {
+        if (string.IsNullOrEmpty(normalizedRelative) || normalizedRelative.EndsWith('/'))
+        {
+            return true;
+        }
+
+        // 已有明确文件扩展名的不当作目录标记
+        var leaf = normalizedRelative.Contains('/')
+            ? normalizedRelative[(normalizedRelative.LastIndexOf('/') + 1)..]
+            : normalizedRelative;
+        if (leaf.Contains('.') && !leaf.StartsWith('.'))
+        {
+            return false;
+        }
+
+        // 已知顶层布局目录，或 0 字节且无扩展名的条目
+        if (KnownLayoutDirectoryNames.Any(d =>
+                normalizedRelative.Equals(d, StringComparison.OrdinalIgnoreCase)))
+        {
+            return true;
+        }
+
+        return entry.Length == 0 && !leaf.Contains('.');
+    }
+
+    /// <summary>
+    /// 确保 <paramref name="directoryPath"/> 可作为目录使用：若同名文件已存在则返回 <see cref="InjectorErrorKind.PathConflict"/>。
+    /// </summary>
+    internal static InjectorError? EnsureDirectoryForExtract(string directoryPath)
+    {
+        if (Directory.Exists(directoryPath))
+        {
+            return null;
+        }
+
+        // —— 检查目标及其尚未存在的祖先是否被文件占用 ——
+        var current = directoryPath;
+        while (!string.IsNullOrEmpty(current))
+        {
+            if (File.Exists(current))
+            {
+                var name = Path.GetFileName(current);
+                return InjectorError.PathConflict(
+                    $"无法创建目录「{name}」：该路径已存在同名文件。"
+                    + "请先删除或重命名该文件后再安装（这不是权限问题）。",
+                    current);
+            }
+
+            if (Directory.Exists(current))
+            {
+                break;
+            }
+
+            current = Path.GetDirectoryName(current);
+        }
+
+        Directory.CreateDirectory(directoryPath);
         return null;
     }
 
@@ -489,7 +633,11 @@ public sealed class GameInstaller : IInstaller
             }
 
             Directory.CreateDirectory(Path.GetDirectoryName(dest)!);
-            ExtractEntryWithPolicy(entry, dest, policy, backupDir, copied, report);
+            var extractErr = ExtractEntryWithPolicy(entry, dest, policy, backupDir, copied, report);
+            if (extractErr != null)
+            {
+                return extractErr;
+            }
         }
 
         return null;
@@ -565,7 +713,7 @@ public sealed class GameInstaller : IInstaller
         }
     }
 
-    private static void ExtractEntryWithPolicy(
+    private static InjectorError? ExtractEntryWithPolicy(
         ZipArchiveEntry entry,
         string dest,
         OverwritePolicy policy,
@@ -573,13 +721,20 @@ public sealed class GameInstaller : IInstaller
         List<string> copied,
         Action<string> report)
     {
+        // —— 目标已是目录：绝不能 ExtractToFile ——
+        if (Directory.Exists(dest))
+        {
+            report($"跳过目录标记条目（目标已是目录）：{dest}");
+            return null;
+        }
+
         if (File.Exists(dest))
         {
             switch (policy)
             {
                 case OverwritePolicy.SkipExisting:
                     report($"跳过已存在：{dest}");
-                    return;
+                    return null;
                 case OverwritePolicy.BackupThenOverwrite:
                     BackupFile(dest, backupDir, report);
                     break;
@@ -590,6 +745,7 @@ public sealed class GameInstaller : IInstaller
 
         entry.ExtractToFile(dest, overwrite: true);
         copied.Add(dest);
+        return null;
     }
 
     internal static void CopyFileWithPolicy(
