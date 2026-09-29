@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Reflection;
 using BepInEx.Logging;
+using BepInExTranslator.Core;
 
 namespace BepInExTranslator.Services
 {
@@ -113,25 +114,7 @@ namespace BepInExTranslator.Services
             return method?.Invoke(null, new object[] { fontType, resourceName });
         }
 
-        private static Type? FindType(string fullName)
-        {
-            foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
-            {
-                try
-                {
-                    var t = asm.GetType(fullName, throwOnError: false);
-                    if (t != null)
-                    {
-                        return t;
-                    }
-                }
-                catch
-                {
-                    // ignore
-                }
-            }
-
-            return null;
-        }
+        private static Type? FindType(string fullName) =>
+            ManagedTypeResolver.FindType(AppDomain.CurrentDomain.GetAssemblies(), fullName);
     }
 }

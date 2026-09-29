@@ -60,14 +60,13 @@ namespace BepInExTranslator
             Runtime = new TranslationRuntime(translator, Settings, Log);
 
             _harmony = new Harmony(PluginGuid);
+
+            // Hook 安装会强制加载 interop；主线程泵依赖同一批类型
             TextHookInstaller.Apply(_harmony, Log);
 
             try
             {
-                if (MainThreadPumpBootstrap.TryEnable(Log))
-                {
-                    UnityMainThread.Enable();
-                }
+                MainThreadPumpBootstrap.TryEnable(_harmony, Log);
             }
             catch (Exception ex)
             {
@@ -107,17 +106,6 @@ namespace BepInExTranslator
             {
                 Directory.CreateDirectory(dir);
             }
-        }
-    }
-
-    internal static class MainThreadPumpBootstrap
-    {
-        public static bool TryEnable(ManualLogSource log)
-        {
-            log.LogInfo(
-                "IL2CPP universal build: main-thread pump requires a game-specific MonoBehaviour injector. " +
-                "Cached translations still apply synchronously on set_text. See BUILD.md.");
-            return false;
         }
     }
 
